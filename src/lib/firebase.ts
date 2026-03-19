@@ -32,16 +32,13 @@ import {
   Timestamp
 } from 'firebase/firestore';
 
-// Admin email - this user will automatically get admin role
 export const ADMIN_EMAIL = 'palerugopi2008@gmail.com';
 
-// Department list for branch-specific workshops
 export const DEPARTMENTS = [
   'AIML', 'AIDS', 'CSE', 'CSE(AI)', 'CSE(DS)', 
   'IT', 'ECE', 'EEE', 'BME', 'BI', 'CYBER SECURITY'
 ];
 
-// Firebase configuration from user
 const firebaseConfig = {
   apiKey: "AIzaSyAOOgIBLgcUOzRkbq2Y5i2IKI11eRH7rbk",
   authDomain: "seatsync-aaa2b.firebaseapp.com",
@@ -52,16 +49,13 @@ const firebaseConfig = {
   measurementId: "G-RH3LNR8YEF"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// Set persistence to local storage
 setPersistence(auth, browserLocalPersistence);
 
-// Auth functions
 export const loginWithEmail = async (email: string, password: string) => {
   return signInWithEmailAndPassword(auth, email, password);
 };
@@ -78,7 +72,6 @@ export const logout = async () => {
   return signOut(auth);
 };
 
-// Auth state observer
 export const onAuthChange = (callback: (user: User | null) => void) => {
   return onAuthStateChanged(auth, callback);
 };
@@ -116,9 +109,7 @@ export const createOrUpdateUserDocument = async (
 ) => {
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
-  
   const role = email === ADMIN_EMAIL ? 'admin' : 'student';
-  
   if (userSnap.exists()) {
     if (email === ADMIN_EMAIL && userSnap.data().role !== 'admin') {
       await updateDoc(userRef, { role: 'admin' });
@@ -143,6 +134,20 @@ export const checkRegNoExists = async (regNo: string): Promise<boolean> => {
   const q = query(usersRef, where('reg_no', '==', regNo));
   const querySnapshot = await getDocs(q);
   return !querySnapshot.empty;
+};
+
+// ─── Block / Unblock a student ────────────────────────────────
+// Sets a `is_blocked: true/false` flag on the user document.
+// Blocked students can still log in but cannot register for workshops.
+
+export const blockUser = async (uid: string): Promise<void> => {
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, { is_blocked: true });
+};
+
+export const unblockUser = async (uid: string): Promise<void> => {
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, { is_blocked: false });
 };
 
 // ============================================
@@ -193,7 +198,6 @@ export const updateEvent = async (eventId: string, data: Partial<EventData>) => 
   return updateDoc(eventRef, data);
 };
 
-// ─── NEW: Delete an event and all its registrations/waitlist entries ───
 export const deleteEvent = async (eventId: string): Promise<void> => {
   const eventRef         = doc(db, 'events', eventId);
   const registrationsRef = collection(db, 'registrations');
@@ -210,14 +214,12 @@ export const deleteEvent = async (eventId: string): Promise<void> => {
     eventRef,
   ];
 
-  // Delete in chunks of 499 to stay within Firestore limits
   const CHUNK = 499;
   for (let i = 0; i < allRefs.length; i += CHUNK) {
     await Promise.all(allRefs.slice(i, i + CHUNK).map(ref => deleteDoc(ref)));
   }
 };
 
-// Real-time event listener
 export const subscribeToEvents = (callback: (events: DocumentData[]) => void) => {
   const eventsRef = collection(db, 'events');
   const q = query(eventsRef, orderBy('date', 'asc'));
@@ -241,25 +243,17 @@ export const checkTimeConflict = async (
   const registrationsRef = collection(db, 'registrations');
   const q = query(registrationsRef, where('user_id', '==', userId));
   const registrations = await getDocs(q);
-  
-  if (registrations.empty) {
-    return { hasConflict: false };
-  }
+  if (registrations.empty) return { hasConflict: false };
 
   const eventIds = registrations.docs.map(doc => doc.data().event_id);
-  
   for (const eventId of eventIds) {
     if (eventId === excludeEventId) continue;
-    
     const eventDoc = await getDoc(doc(db, 'events', eventId));
     if (!eventDoc.exists()) continue;
-    
     const event = eventDoc.data();
-    
     if (event.date === eventDate) {
       const existingStart = event.start_time || '00:00';
-      const existingEnd = event.end_time || '23:59';
-      
+      const existingEnd   = event.end_time   || '23:59';
       if (
         (startTime >= existingStart && startTime < existingEnd) ||
         (endTime > existingStart && endTime <= existingEnd) ||
@@ -269,67 +263,62 @@ export const checkTimeConflict = async (
       }
     }
   }
-  
   return { hasConflict: false };
 };
 
 export const registerForEvent = async (userId: string, eventId: string, userDepartment: string) => {
-  const eventRef = doc(db, 'events', eventId);
+  const eventRef         = doc(db, 'events', eventId);
+  const userRef          = doc(db, 'users', userId);
   const registrationsRef = collection(db, 'registrations');
-  const waitlistRef = collection(db, 'waitlist');
-  
+  const waitlistRef      = collection(db, 'waitlist');
+
+  // ── Block check ──────────────────────────────────────────
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists() && userSnap.data().is_blocked === true) {
+    throw new Error(
+      'Your account has been blocked by the admin. You cannot register for workshops at this time. Please contact your administrator for assistance.'
+    );
+  }
+
+  // Duplicate registration check
   const regQuery = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const existingReg = await getDocs(regQuery);
-  
-  if (!existingReg.empty) {
-    throw new Error('Already registered for this workshop');
-  }
-  
+  if (!existingReg.empty) throw new Error('Already registered for this workshop');
+
+  // Duplicate waitlist check
   const waitlistQuery = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const existingWaitlist = await getDocs(waitlistQuery);
-  
-  if (!existingWaitlist.empty) {
-    throw new Error('Already on the waitlist for this workshop');
-  }
-  
+  if (!existingWaitlist.empty) throw new Error('Already on the waitlist for this workshop');
+
   const eventDoc = await getDoc(eventRef);
-  if (!eventDoc.exists()) {
-    throw new Error('Workshop does not exist');
-  }
-  
+  if (!eventDoc.exists()) throw new Error('Workshop does not exist');
   const eventData = eventDoc.data();
-  
+
+  // Branch eligibility
   if (eventData.target_branches && eventData.target_branches.length > 0) {
     if (!eventData.target_branches.includes(userDepartment)) {
       throw new Error('This workshop is not available for your department');
     }
   }
-  
+
+  // Time conflict check
   const conflictResult = await checkTimeConflict(
-    userId, 
-    eventData.date, 
+    userId,
+    eventData.date,
     eventData.start_time || '00:00',
-    eventData.end_time || '23:59'
+    eventData.end_time   || '23:59'
   );
-  
   if (conflictResult.hasConflict) {
     throw new Error(`Time conflict with: ${conflictResult.conflictingEvent}`);
   }
-  
+
   return runTransaction(db, async (transaction) => {
-    const eventDoc = await transaction.get(eventRef);
-    
-    if (!eventDoc.exists()) {
-      throw new Error('Workshop does not exist');
-    }
-    
-    const eventData = eventDoc.data();
-    
-    if (eventData.available_seats > 0) {
-      transaction.update(eventRef, {
-        available_seats: eventData.available_seats - 1
-      });
-      
+    const freshEvent = await transaction.get(eventRef);
+    if (!freshEvent.exists()) throw new Error('Workshop does not exist');
+    const freshData = freshEvent.data();
+
+    if (freshData.available_seats > 0) {
+      transaction.update(eventRef, { available_seats: freshData.available_seats - 1 });
       const newRegRef = doc(registrationsRef);
       transaction.set(newRegRef, {
         user_id: userId,
@@ -337,11 +326,9 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
         timestamp: serverTimestamp(),
         status: 'confirmed'
       });
-      
       return { status: 'registered', message: 'Successfully registered!' };
     } else {
       const waitlistCount = await getDocs(query(waitlistRef, where('event_id', '==', eventId)));
-      
       const newWaitlistRef = doc(waitlistRef);
       transaction.set(newWaitlistRef, {
         user_id: userId,
@@ -350,59 +337,46 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
         timestamp: serverTimestamp(),
         status: 'waiting'
       });
-      
       return { status: 'waitlisted', message: 'Added to waitlist!' };
     }
   });
 };
 
 export const cancelRegistration = async (userId: string, eventId: string) => {
-  const eventRef = doc(db, 'events', eventId);
+  const eventRef         = doc(db, 'events', eventId);
   const registrationsRef = collection(db, 'registrations');
-  const waitlistRef = collection(db, 'waitlist');
-  
-  const regQuery = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
+  const waitlistRef      = collection(db, 'waitlist');
+
+  const regQuery    = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const regSnapshot = await getDocs(regQuery);
-  
+
   if (regSnapshot.empty) {
-    const waitlistQuery = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
+    const waitlistQuery    = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
     const waitlistSnapshot = await getDocs(waitlistQuery);
-    
     if (!waitlistSnapshot.empty) {
       await deleteDoc(waitlistSnapshot.docs[0].ref);
       return { status: 'removed_from_waitlist' };
     }
     throw new Error('Registration not found');
   }
-  
+
   const registrationDoc = regSnapshot.docs[0];
-  
-  const waitlistQuery = query(waitlistRef, where('event_id', '==', eventId));
+
+  const waitlistQuery    = query(waitlistRef, where('event_id', '==', eventId));
   const waitlistSnapshot = await getDocs(waitlistQuery);
-  
-  const sortedWaitlist = waitlistSnapshot.docs.sort((a, b) => {
-    const posA = a.data().position || 0;
-    const posB = b.data().position || 0;
-    return posA - posB;
-  });
-  
-  const nextInLine = sortedWaitlist.length > 0 ? sortedWaitlist[0] : null;
-  
+  const sortedWaitlist   = waitlistSnapshot.docs.sort((a, b) => (a.data().position || 0) - (b.data().position || 0));
+  const nextInLine       = sortedWaitlist.length > 0 ? sortedWaitlist[0] : null;
+
   return runTransaction(db, async (transaction) => {
     const eventDoc = await transaction.get(eventRef);
-    
-    if (!eventDoc.exists()) {
-      throw new Error('Workshop does not exist');
-    }
-    
+    if (!eventDoc.exists()) throw new Error('Workshop does not exist');
     const eventData = eventDoc.data();
-    
+
     transaction.delete(registrationDoc.ref);
-    
+
     if (nextInLine) {
       const nextUserId = nextInLine.data().user_id;
-      
-      const newRegRef = doc(registrationsRef);
+      const newRegRef  = doc(registrationsRef);
       transaction.set(newRegRef, {
         user_id: nextUserId,
         event_id: eventId,
@@ -410,18 +384,10 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
         status: 'confirmed',
         promoted_from_waitlist: true
       });
-      
       transaction.delete(nextInLine.ref);
-      
-      return { 
-        status: 'cancelled_and_promoted', 
-        promotedUserId: nextUserId 
-      };
+      return { status: 'cancelled_and_promoted', promotedUserId: nextUserId };
     } else {
-      transaction.update(eventRef, {
-        available_seats: eventData.available_seats + 1
-      });
-      
+      transaction.update(eventRef, { available_seats: eventData.available_seats + 1 });
       return { status: 'cancelled' };
     }
   });
@@ -438,15 +404,8 @@ export const checkWaitlist = async (userId: string, eventId: string): Promise<{ 
   const waitlistRef = collection(db, 'waitlist');
   const q = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const querySnapshot = await getDocs(q);
-  
-  if (querySnapshot.empty) {
-    return { onWaitlist: false };
-  }
-  
-  return { 
-    onWaitlist: true, 
-    position: querySnapshot.docs[0].data().position 
-  };
+  if (querySnapshot.empty) return { onWaitlist: false };
+  return { onWaitlist: true, position: querySnapshot.docs[0].data().position };
 };
 
 export const getUserRegistrations = async (userId: string) => {
@@ -521,44 +480,39 @@ export interface EventAnalytics {
 }
 
 export const getEventAnalytics = async (): Promise<EventAnalytics[]> => {
-  const eventsRef = collection(db, 'events');
+  const eventsRef        = collection(db, 'events');
   const registrationsRef = collection(db, 'registrations');
-  const waitlistRef = collection(db, 'waitlist');
-  
+  const waitlistRef      = collection(db, 'waitlist');
+
   const [eventsSnap, regsSnap, waitlistSnap] = await Promise.all([
     getDocs(eventsRef),
     getDocs(registrationsRef),
     getDocs(waitlistRef)
   ]);
-  
+
   const registrationsByEvent: Record<string, number> = {};
-  const waitlistByEvent: Record<string, number> = {};
-  
+  const waitlistByEvent: Record<string, number>      = {};
+
   regsSnap.docs.forEach(doc => {
     const eventId = doc.data().event_id;
     registrationsByEvent[eventId] = (registrationsByEvent[eventId] || 0) + 1;
   });
-  
   waitlistSnap.docs.forEach(doc => {
     const eventId = doc.data().event_id;
     waitlistByEvent[eventId] = (waitlistByEvent[eventId] || 0) + 1;
   });
-  
+
   return eventsSnap.docs.map(doc => {
-    const event = doc.data();
-    const enrolledCount = registrationsByEvent[doc.id] || 0;
-    const waitlistCount = waitlistByEvent[doc.id] || 0;
-    const utilizationPercent = event.total_seats > 0 
-      ? Math.round((enrolledCount / event.total_seats) * 100)
-      : 0;
-    
+    const event            = doc.data();
+    const enrolledCount    = registrationsByEvent[doc.id] || 0;
+    const waitlistCount    = waitlistByEvent[doc.id] || 0;
+    const utilizationPercent = event.total_seats > 0
+      ? Math.round((enrolledCount / event.total_seats) * 100) : 0;
+
     let demandLevel: 'High' | 'Medium' | 'Low' = 'Low';
-    if (utilizationPercent >= 80 || waitlistCount > 0) {
-      demandLevel = 'High';
-    } else if (utilizationPercent >= 50) {
-      demandLevel = 'Medium';
-    }
-    
+    if (utilizationPercent >= 80 || waitlistCount > 0) demandLevel = 'High';
+    else if (utilizationPercent >= 50) demandLevel = 'Medium';
+
     return {
       eventId: doc.id,
       title: event.title,
@@ -592,53 +546,44 @@ export interface ComplianceStatus {
 }
 
 export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
-  const usersRef = collection(db, 'users');
-  const eventsRef = collection(db, 'events');
+  const usersRef         = collection(db, 'users');
+  const eventsRef        = collection(db, 'events');
   const registrationsRef = collection(db, 'registrations');
-  
+
   const [usersSnap, eventsSnap, regsSnap] = await Promise.all([
     getDocs(query(usersRef, where('role', '==', 'student'))),
     getDocs(query(eventsRef, where('is_mandatory', '==', true))),
     getDocs(registrationsRef)
   ]);
-  
-  const mandatoryEvents = eventsSnap.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
-  
+
+  const mandatoryEvents = eventsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
   const registrationsByUser: Record<string, Set<string>> = {};
   regsSnap.docs.forEach(doc => {
-    const userId = doc.data().user_id;
+    const userId  = doc.data().user_id;
     const eventId = doc.data().event_id;
-    if (!registrationsByUser[userId]) {
-      registrationsByUser[userId] = new Set();
-    }
+    if (!registrationsByUser[userId]) registrationsByUser[userId] = new Set();
     registrationsByUser[userId].add(eventId);
   });
-  
+
   return usersSnap.docs.map(userDoc => {
-    const user = userDoc.data();
+    const user    = userDoc.data();
     const userRegs = registrationsByUser[userDoc.id] || new Set();
-    
+
     const relevantMandatory = mandatoryEvents.filter(event => {
       const branches = (event as { target_branches?: string[] }).target_branches || [];
       return branches.length === 0 || branches.includes(user.department);
     });
-    
-    const completedMandatory = relevantMandatory.filter(event => 
-      userRegs.has(event.id)
-    ).length;
-    
-    const pendingWorkshops = relevantMandatory
-      .filter(event => !userRegs.has(event.id))
-      .map(event => (event as unknown as { title: string }).title);
-    
-    const totalMandatory = relevantMandatory.length;
-    const compliancePercent = totalMandatory > 0 
-      ? Math.round((completedMandatory / totalMandatory) * 100)
-      : 100;
-    
+
+    const completedMandatory = relevantMandatory.filter(e => userRegs.has(e.id)).length;
+    const pendingWorkshops   = relevantMandatory
+      .filter(e => !userRegs.has(e.id))
+      .map(e => (e as unknown as { title: string }).title);
+
+    const totalMandatory     = relevantMandatory.length;
+    const compliancePercent  = totalMandatory > 0
+      ? Math.round((completedMandatory / totalMandatory) * 100) : 100;
+
     return {
       userId: userDoc.id,
       userName: user.name,
@@ -659,19 +604,19 @@ export const getStudentCompliance = async (userId: string, department: string): 
   compliancePercent: number;
   isCompliant: boolean;
 }> => {
-  const eventsRef = collection(db, 'events');
+  const eventsRef        = collection(db, 'events');
   const registrationsRef = collection(db, 'registrations');
-  
+
   const [eventsSnap, regsSnap] = await Promise.all([
     getDocs(query(eventsRef, where('is_mandatory', '==', true))),
     getDocs(query(registrationsRef, where('user_id', '==', userId)))
   ]);
-  
+
   const userEventIds = new Set(regsSnap.docs.map(doc => doc.data().event_id));
-  
+
   const mandatoryEvents = eventsSnap.docs
     .filter(doc => {
-      const event = doc.data();
+      const event    = doc.data();
       const branches = event.target_branches || [];
       return branches.length === 0 || branches.includes(department);
     })
@@ -679,10 +624,10 @@ export const getStudentCompliance = async (userId: string, department: string): 
       event: { id: doc.id, ...doc.data() },
       completed: userEventIds.has(doc.id)
     }));
-  
+
   const completedCount = mandatoryEvents.filter(m => m.completed).length;
-  const totalCount = mandatoryEvents.length;
-  
+  const totalCount     = mandatoryEvents.length;
+
   return {
     mandatory: mandatoryEvents,
     compliancePercent: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 100,
