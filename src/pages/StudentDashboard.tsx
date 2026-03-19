@@ -35,6 +35,26 @@ interface ComplianceData {
   isCompliant: boolean;
 }
 
+// ─── Hide events that are past or starting within 2 hours ────
+// Mirrors the same logic used in AdminEvents so behaviour is consistent.
+const isEventHidden = (event: EventData): boolean => {
+  if (!event.date) return false;
+  const now = new Date();
+  const buildDateTime = (dateStr: string, timeStr?: string): Date => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = timeStr ? timeStr.split(':').map(Number) : [23, 59];
+    return new Date(year, month - 1, day, hours, minutes, 0, 0);
+  };
+  const startDT = buildDateTime(event.date, event.start_time);
+  const endDT   = buildDateTime(event.date, event.end_time);
+  // Rule 1 — already ended
+  if (now >= endDT) return true;
+  // Rule 2 — starts within 2 hours
+  const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+  if (startDT <= twoHoursFromNow) return true;
+  return false;
+};
+
 export const StudentDashboard: React.FC = () => {
   const { user, userData, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -56,13 +76,19 @@ export const StudentDashboard: React.FC = () => {
     }
   }, [user, userData, authLoading, navigate]);
 
-  // Subscribe to events in real-time (filtered by branch)
+  // Subscribe to events in real-time
   useEffect(() => {
     const unsubscribe = subscribeToEvents((eventsData: DocumentData[]) => {
-      // Filter events based on student's department
       const filteredEvents = (eventsData as EventData[]).filter(event => {
+        // ── 1. Workshops only — hide Seminars from students ──
+        if (event.type !== 'Workshop') return false;
+
+        // ── 2. Hide past events and events starting within 2 hours ──
+        if (isEventHidden(event)) return false;
+
+        // ── 3. Branch / department filter ──
         if (!event.target_branches || event.target_branches.length === 0) {
-          return true; // Event is for all branches
+          return true; // available to all departments
         }
         return event.target_branches.includes(userData?.department || '');
       });
@@ -85,14 +111,12 @@ export const StudentDashboard: React.FC = () => {
         }
       }
     };
-
     fetchRegistrations();
   }, [user]);
 
   // Subscribe to waitlist
   useEffect(() => {
     if (!user) return;
-    
     const unsubscribe = subscribeToWaitlist((waitlistData: DocumentData[]) => {
       const userWaitlist = new Map<string, number>();
       waitlistData
@@ -102,7 +126,6 @@ export const StudentDashboard: React.FC = () => {
         });
       setWaitlistedEvents(userWaitlist);
     });
-
     return () => unsubscribe();
   }, [user]);
 
@@ -118,27 +141,21 @@ export const StudentDashboard: React.FC = () => {
         }
       }
     };
-
     fetchCompliance();
   }, [user, userData, registeredEvents]);
 
   const handleRegister = async (eventId: string) => {
     if (!user || !userData) return;
-
     setLoadingEvent(eventId);
     setMessage(null);
-
     try {
       const result = await registerForEvent(user.uid, eventId, userData.department);
-      
       if (result.status === 'registered') {
         setRegisteredEvents(prev => new Set([...prev, eventId]));
         setMessage({ type: 'success', text: result.message });
       } else if (result.status === 'waitlisted') {
         setMessage({ type: 'info', text: result.message });
       }
-      
-      // Refresh registrations
       const regs = await getUserRegistrations(user.uid);
       const regEventIds = new Set(regs.map((r: DocumentData) => r.event_id as string));
       setRegisteredEvents(regEventIds);
@@ -152,14 +169,9 @@ export const StudentDashboard: React.FC = () => {
 
   const handleCancel = async (eventId: string) => {
     if (!user) return;
-    
-    if (!confirm('Are you sure you want to cancel this registration?')) {
-      return;
-    }
-
+    if (!confirm('Are you sure you want to cancel this registration?')) return;
     setCancellingEvent(eventId);
     setMessage(null);
-
     try {
       await cancelRegistration(user.uid, eventId);
       setRegisteredEvents(prev => {
@@ -178,10 +190,7 @@ export const StudentDashboard: React.FC = () => {
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
   };
 
@@ -202,6 +211,7 @@ export const StudentDashboard: React.FC = () => {
     );
   }
 
+  // Only Workshops that are not hidden — already filtered in the subscription above
   const upcomingEvents = events.filter(e => e.status === 'Upcoming');
   const registeredEventsList = events.filter(e => registeredEvents.has(e.id));
   const waitlistedEventsList = events.filter(e => waitlistedEvents.has(e.id));
@@ -217,7 +227,7 @@ export const StudentDashboard: React.FC = () => {
             Welcome, {userData?.name}! 👋
           </h1>
           <p className="mt-3 text-[#6B7280] text-lg">
-            Browse and register for upcoming workshops and seminars
+            Browse and register for upcoming workshops
           </p>
         </div>
 
@@ -285,21 +295,28 @@ export const StudentDashboard: React.FC = () => {
               ? 'bg-blue-50 text-blue-700'
               : 'bg-red-50 text-red-600'
           } shadow-[inset_3px_3px_6px_rgba(0,0,0,0.05),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]`}>
-            <div className="flex items-center gap-2">
-              {message.type === 'success' ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                {message.type === 'success' ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : message.type === 'info' ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                {message.text}
+              </div>
+              <button onClick={() => setMessage(null)} className="text-current opacity-60 hover:opacity-100">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
-              ) : message.type === 'info' ? (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-              {message.text}
+              </button>
             </div>
           </div>
         )}
@@ -341,7 +358,7 @@ export const StudentDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* Content */}
+        {/* ── Available Workshops Tab ── */}
         {activeTab === 'workshops' && (
           <div>
             <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
@@ -356,7 +373,7 @@ export const StudentDashboard: React.FC = () => {
                   </svg>
                 </div>
                 <h3 className="text-xl font-medium text-[#3D4852] mb-2">No workshops available</h3>
-                <p className="text-[#6B7280]">Check back later for new workshops and seminars</p>
+                <p className="text-[#6B7280]">Check back later for new workshops</p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -371,12 +388,8 @@ export const StudentDashboard: React.FC = () => {
                       {/* Event Type & Mandatory Badge */}
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
-                          <span className={`px-4 py-1.5 rounded-full text-sm font-medium ${
-                            event.type === 'Workshop'
-                              ? 'bg-[#6C63FF]/10 text-[#6C63FF]'
-                              : 'bg-[#38B2AC]/10 text-[#38B2AC]'
-                          }`}>
-                            {event.type}
+                          <span className="px-4 py-1.5 rounded-full text-sm font-medium bg-[#6C63FF]/10 text-[#6C63FF]">
+                            Workshop
                           </span>
                           {event.is_mandatory && (
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">
@@ -384,9 +397,7 @@ export const StudentDashboard: React.FC = () => {
                             </span>
                           )}
                         </div>
-                        <span className={`text-sm font-medium ${
-                          isFull ? 'text-red-500' : 'text-[#38B2AC]'
-                        }`}>
+                        <span className={`text-sm font-medium ${isFull ? 'text-red-500' : 'text-[#38B2AC]'}`}>
                           {isFull ? 'Full' : `${event.available_seats} seats`}
                         </span>
                       </div>
@@ -396,14 +407,15 @@ export const StudentDashboard: React.FC = () => {
                         {event.title}
                       </h3>
 
-                      {/* Event Date & Time */}
+                      {/* Date */}
                       <div className="flex items-center gap-2 text-[#6B7280] mb-2">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                         <span className="text-sm">{formatDate(event.date)}</span>
                       </div>
-                      
+
+                      {/* Time */}
                       {(event.start_time || event.end_time) && (
                         <div className="flex items-center gap-2 text-[#6B7280] mb-4">
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -422,9 +434,9 @@ export const StudentDashboard: React.FC = () => {
                           <span>{event.total_seats - event.available_seats} / {event.total_seats}</span>
                         </div>
                         <div className="h-3 rounded-full bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full rounded-full transition-all duration-500 ${
-                              isFull 
+                              isFull
                                 ? 'bg-gradient-to-r from-red-500 to-red-400'
                                 : 'bg-gradient-to-r from-[#6C63FF] to-[#8B84FF]'
                             }`}
@@ -433,7 +445,7 @@ export const StudentDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Register Button */}
+                      {/* Action Button */}
                       <div className="mt-auto">
                         {isRegistered ? (
                           <div className="space-y-2">
@@ -445,8 +457,8 @@ export const StudentDashboard: React.FC = () => {
                                 Enrolled
                               </span>
                             </Button>
-                            <Button 
-                              variant="danger" 
+                            <Button
+                              variant="danger"
                               size="sm"
                               className="w-full"
                               onClick={() => handleCancel(event.id)}
@@ -465,8 +477,8 @@ export const StudentDashboard: React.FC = () => {
                                 Waitlist #{waitlistPosition}
                               </span>
                             </Button>
-                            <Button 
-                              variant="danger" 
+                            <Button
+                              variant="danger"
                               size="sm"
                               className="w-full"
                               onClick={() => handleCancel(event.id)}
@@ -476,8 +488,8 @@ export const StudentDashboard: React.FC = () => {
                             </Button>
                           </div>
                         ) : (
-                          <Button 
-                            variant="primary" 
+                          <Button
+                            variant="primary"
                             className="w-full"
                             onClick={() => handleRegister(event.id)}
                             isLoading={loadingEvent === event.id}
@@ -494,11 +506,10 @@ export const StudentDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* ── My Enrollments Tab ── */}
         {activeTab === 'my-registrations' && (
           <div>
-            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
-              My Enrollments
-            </h2>
+            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">My Enrollments</h2>
 
             {registeredEventsList.length === 0 && waitlistedEventsList.length === 0 ? (
               <Card hover={false} className="text-center py-16">
@@ -512,7 +523,6 @@ export const StudentDashboard: React.FC = () => {
               </Card>
             ) : (
               <div className="space-y-6">
-                {/* Confirmed Registrations */}
                 {registeredEventsList.length > 0 && (
                   <div>
                     <h3 className="text-lg font-medium text-[#3D4852] mb-4 flex items-center gap-2">
@@ -524,12 +534,8 @@ export const StudentDashboard: React.FC = () => {
                         <Card key={event.id} className="flex items-center justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                event.type === 'Workshop'
-                                  ? 'bg-[#6C63FF]/10 text-[#6C63FF]'
-                                  : 'bg-[#38B2AC]/10 text-[#38B2AC]'
-                              }`}>
-                                {event.type}
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-[#6C63FF]/10 text-[#6C63FF]">
+                                Workshop
                               </span>
                               {event.is_mandatory && (
                                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">
@@ -540,8 +546,8 @@ export const StudentDashboard: React.FC = () => {
                             <h4 className="font-bold text-[#3D4852]">{event.title}</h4>
                             <p className="text-sm text-[#6B7280]">{formatDate(event.date)}</p>
                           </div>
-                          <Button 
-                            variant="danger" 
+                          <Button
+                            variant="danger"
                             size="sm"
                             onClick={() => handleCancel(event.id)}
                             isLoading={cancellingEvent === event.id}
@@ -554,7 +560,6 @@ export const StudentDashboard: React.FC = () => {
                   </div>
                 )}
 
-                {/* Waitlisted */}
                 {waitlistedEventsList.length > 0 && (
                   <div>
                     <h3 className="text-lg font-medium text-[#3D4852] mb-4 flex items-center gap-2">
@@ -566,12 +571,8 @@ export const StudentDashboard: React.FC = () => {
                         <Card key={event.id} className="flex items-center justify-between">
                           <div>
                             <div className="flex items-center gap-2 mb-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                event.type === 'Workshop'
-                                  ? 'bg-[#6C63FF]/10 text-[#6C63FF]'
-                                  : 'bg-[#38B2AC]/10 text-[#38B2AC]'
-                              }`}>
-                                {event.type}
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-[#6C63FF]/10 text-[#6C63FF]">
+                                Workshop
                               </span>
                               <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-600">
                                 Position #{waitlistedEvents.get(event.id)}
@@ -580,8 +581,8 @@ export const StudentDashboard: React.FC = () => {
                             <h4 className="font-bold text-[#3D4852]">{event.title}</h4>
                             <p className="text-sm text-[#6B7280]">{formatDate(event.date)}</p>
                           </div>
-                          <Button 
-                            variant="danger" 
+                          <Button
+                            variant="danger"
                             size="sm"
                             onClick={() => handleCancel(event.id)}
                             isLoading={cancellingEvent === event.id}
@@ -598,18 +599,18 @@ export const StudentDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* ── Compliance Tab ── */}
         {activeTab === 'compliance' && (
           <div>
             <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
               Academic Compliance Status
             </h2>
 
-            {/* Compliance Overview */}
             <Card hover={false} className="mb-8">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                 <div className="flex items-center gap-6">
                   <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
-                    compliance?.isCompliant 
+                    compliance?.isCompliant
                       ? 'bg-gradient-to-br from-[#38B2AC] to-[#4FD1C5]'
                       : 'bg-gradient-to-br from-[#FC8181] to-[#F56565]'
                   } shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]`}>
@@ -626,7 +627,6 @@ export const StudentDashboard: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                
                 {!compliance?.isCompliant && (
                   <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
                     <p className="text-sm text-red-700">
@@ -637,11 +637,10 @@ export const StudentDashboard: React.FC = () => {
               </div>
             </Card>
 
-            {/* Mandatory Workshops List */}
             <h3 className="text-lg font-medium text-[#3D4852] mb-4">
               Mandatory Workshops for {userData?.department}
             </h3>
-            
+
             {!compliance?.mandatory || compliance.mandatory.length === 0 ? (
               <Card hover={false} className="text-center py-12">
                 <p className="text-[#6B7280]">No mandatory workshops assigned to your department</p>
@@ -652,9 +651,7 @@ export const StudentDashboard: React.FC = () => {
                   <Card key={event.id} hover={false} className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        completed 
-                          ? 'bg-[#38B2AC]/10'
-                          : 'bg-[#FC8181]/10'
+                        completed ? 'bg-[#38B2AC]/10' : 'bg-[#FC8181]/10'
                       }`}>
                         {completed ? (
                           <svg className="w-5 h-5 text-[#38B2AC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -672,9 +669,7 @@ export const StudentDashboard: React.FC = () => {
                       </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      completed 
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
+                      completed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}>
                       {completed ? 'Completed' : 'Pending'}
                     </span>
