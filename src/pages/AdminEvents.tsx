@@ -1,4 +1,4 @@
-// Admin Events Management Page - Enhanced with Auto-hide, 2-hour rule, and Delete
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
