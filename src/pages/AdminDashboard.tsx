@@ -1,4 +1,4 @@
-
+// Admin Dashboard Page - Enhanced with Analytics, Demand Insights, Compliance Tracking, and Users tab
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -57,7 +57,12 @@ export const AdminDashboard: React.FC = () => {
   const [waitlist, setWaitlist] = useState<WaitlistData[]>([]);
   const [analytics, setAnalytics] = useState<EventAnalytics[]>([]);
   const [compliance, setCompliance] = useState<ComplianceStatus[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'users' | 'compliance'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'users' | 'compliance' | 'all-users'>('overview');
+
+  // Search & filter state for Users tab
+  const [userSearch, setUserSearch] = useState('');
+  const [userDeptFilter, setUserDeptFilter] = useState('All');
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
 
   // Redirect if not logged in or not an admin
   useEffect(() => {
@@ -73,19 +78,15 @@ export const AdminDashboard: React.FC = () => {
     const unsubUsers = subscribeToUsers((data: DocumentData[]) => {
       setUsers(data as UserData[]);
     });
-
     const unsubEvents = subscribeToEvents((data: DocumentData[]) => {
       setEvents(data as EventData[]);
     });
-
     const unsubRegs = subscribeToRegistrations((data: DocumentData[]) => {
       setRegistrations(data as RegistrationData[]);
     });
-
     const unsubWaitlist = subscribeToWaitlist((data: DocumentData[]) => {
       setWaitlist(data as WaitlistData[]);
     });
-
     return () => {
       unsubUsers();
       unsubEvents();
@@ -94,7 +95,7 @@ export const AdminDashboard: React.FC = () => {
     };
   }, []);
 
-  // Fetch analytics and compliance data
+  // Fetch analytics and compliance
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -108,33 +109,49 @@ export const AdminDashboard: React.FC = () => {
         console.error('Error fetching data:', error);
       }
     };
-
     fetchData();
-  }, [registrations, waitlist]); // Refresh when registrations change
+  }, [registrations, waitlist]);
 
+  // ── Helpers ──────────────────────────────────────────────
   const getUserRegistrations = (userId: string) => {
-    const userRegs = registrations.filter(r => r.user_id === userId);
-    return userRegs.map(r => events.find(e => e.id === r.event_id)).filter(Boolean);
+    return registrations
+      .filter(r => r.user_id === userId)
+      .map(r => events.find(e => e.id === r.event_id))
+      .filter(Boolean) as EventData[];
   };
 
-  const getWaitlistForEvent = (eventId: string) => {
-    return waitlist.filter(w => w.event_id === eventId).length;
-  };
+  const getWaitlistForEvent = (eventId: string) =>
+    waitlist.filter(w => w.event_id === eventId).length;
 
-  const totalSeats = events.reduce((acc, e) => acc + e.total_seats, 0);
+  const getComplianceForUser = (userId: string): ComplianceStatus | undefined =>
+    compliance.find(c => c.userId === userId);
+
+  const totalSeats      = events.reduce((acc, e) => acc + e.total_seats, 0);
   const registeredSeats = events.reduce((acc, e) => acc + (e.total_seats - e.available_seats), 0);
-  const studentCount = users.filter(u => u.role === 'student').length;
+  const studentCount    = users.filter(u => u.role === 'student').length;
   const totalWaitlisted = waitlist.length;
   const compliantStudents = compliance.filter(c => c.isCompliant).length;
 
   const getDemandColor = (level: string) => {
     switch (level) {
-      case 'High': return 'bg-red-100 text-red-700';
+      case 'High':   return 'bg-red-100 text-red-700';
       case 'Medium': return 'bg-yellow-100 text-yellow-700';
-      case 'Low': return 'bg-green-100 text-green-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'Low':    return 'bg-green-100 text-green-700';
+      default:       return 'bg-gray-100 text-gray-700';
     }
   };
+
+  // ── Users tab derived data ────────────────────────────────
+  const students = users.filter(u => u.role === 'student');
+  const allDepartments = ['All', ...Array.from(new Set(students.map(s => s.department))).sort()];
+
+  const filteredStudents = students.filter(s => {
+    const matchSearch = 
+      s.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+      s.reg_no.toLowerCase().includes(userSearch.toLowerCase());
+    const matchDept = userDeptFilter === 'All' || s.department === userDeptFilter;
+    return matchSearch && matchDept;
+  });
 
   if (authLoading) {
     return (
@@ -147,7 +164,7 @@ export const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#E0E5EC]">
       <Navbar />
-      
+
       <main className="max-w-7xl mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-12">
@@ -230,58 +247,36 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Tabs */}
         <div className="flex flex-wrap gap-4 mb-8">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 ${
-              activeTab === 'overview'
-                ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]'
-                : 'text-[#6B7280] bg-[#E0E5EC] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-            }`}
-          >
-            Seat Overview
-          </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 ${
-              activeTab === 'analytics'
-                ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]'
-                : 'text-[#6B7280] bg-[#E0E5EC] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-            }`}
-          >
-            Analytics & Demand
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 ${
-              activeTab === 'users'
-                ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]'
-                : 'text-[#6B7280] bg-[#E0E5EC] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-            }`}
-          >
-            Enrolled Students
-          </button>
-          <button
-            onClick={() => setActiveTab('compliance')}
-            className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 flex items-center gap-2 ${
-              activeTab === 'compliance'
-                ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]'
-                : 'text-[#6B7280] bg-[#E0E5EC] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-            }`}
-          >
-            Compliance Tracking
-            {compliantStudents < studentCount && (
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            )}
-          </button>
+          {(['overview', 'analytics', 'users', 'all-users', 'compliance'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 flex items-center gap-2 ${
+                activeTab === tab
+                  ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]'
+                  : 'text-[#6B7280] bg-[#E0E5EC] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
+              }`}
+            >
+              {tab === 'overview'   && 'Seat Overview'}
+              {tab === 'analytics'  && 'Analytics & Demand'}
+              {tab === 'users'      && 'Enrolled Students'}
+              {tab === 'all-users'  && 'All Users'}
+              {tab === 'compliance' && (
+                <>
+                  Compliance Tracking
+                  {compliantStudents < studentCount && (
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                  )}
+                </>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* Content */}
+        {/* ── Seat Overview ── */}
         {activeTab === 'overview' && (
           <div>
-            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
-              Live Seat Availability
-            </h2>
-
+            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">Live Seat Availability</h2>
             {events.length === 0 ? (
               <Card hover={false} className="text-center py-16">
                 <div className="w-20 h-20 mx-auto rounded-full bg-[#E0E5EC] flex items-center justify-center shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] mb-6">
@@ -297,77 +292,45 @@ export const AdminDashboard: React.FC = () => {
                 {events.map((event) => {
                   const fillPercentage = ((event.total_seats - event.available_seats) / event.total_seats) * 100;
                   const waitlistCount = getWaitlistForEvent(event.id);
-                  
                   return (
                     <Card key={event.id} className="relative overflow-hidden">
-                      {/* Status Badge */}
                       <div className="absolute top-4 right-4 flex gap-2">
                         {event.is_mandatory && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">
-                            Mandatory
-                          </span>
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">Mandatory</span>
                         )}
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          event.status === 'Upcoming'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {event.status}
-                        </span>
+                          event.status === 'Upcoming' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                        }`}>{event.status}</span>
                       </div>
-
-                      {/* Event Type */}
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        event.type === 'Workshop'
-                          ? 'bg-[#6C63FF]/10 text-[#6C63FF]'
-                          : 'bg-[#38B2AC]/10 text-[#38B2AC]'
-                      }`}>
-                        {event.type}
-                      </span>
-
-                      {/* Title */}
-                      <h3 className="font-display font-bold text-xl text-[#3D4852] mt-3 mb-4">
-                        {event.title}
-                      </h3>
-
-                      {/* Seat Info */}
+                        event.type === 'Workshop' ? 'bg-[#6C63FF]/10 text-[#6C63FF]' : 'bg-[#38B2AC]/10 text-[#38B2AC]'
+                      }`}>{event.type}</span>
+                      <h3 className="font-display font-bold text-xl text-[#3D4852] mt-3 mb-4">{event.title}</h3>
                       <div className="space-y-3">
                         <div className="flex justify-between items-center">
                           <span className="text-[#6B7280]">Enrolled</span>
-                          <span className="font-bold text-[#3D4852]">
-                            {event.total_seats - event.available_seats} / {event.total_seats}
-                          </span>
+                          <span className="font-bold text-[#3D4852]">{event.total_seats - event.available_seats} / {event.total_seats}</span>
                         </div>
-
-                        {/* Progress Bar */}
                         <div className="h-4 rounded-full bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] overflow-hidden">
-                          <div 
+                          <div
                             className={`h-full rounded-full transition-all duration-500 ${
-                              fillPercentage >= 90
-                                ? 'bg-gradient-to-r from-red-500 to-red-400'
-                                : fillPercentage >= 70
-                                ? 'bg-gradient-to-r from-orange-500 to-orange-400'
-                                : 'bg-gradient-to-r from-[#38B2AC] to-[#4FD1C5]'
+                              fillPercentage >= 90 ? 'bg-gradient-to-r from-red-500 to-red-400'
+                              : fillPercentage >= 70 ? 'bg-gradient-to-r from-orange-500 to-orange-400'
+                              : 'bg-gradient-to-r from-[#38B2AC] to-[#4FD1C5]'
                             }`}
                             style={{ width: `${fillPercentage}%` }}
                           />
                         </div>
-
                         <div className="flex justify-between text-sm">
                           <span className="text-[#6B7280]">Available</span>
-                          <span className={`font-medium ${
-                            event.available_seats <= 5 ? 'text-red-500' : 'text-[#38B2AC]'
-                          }`}>
+                          <span className={`font-medium ${event.available_seats <= 5 ? 'text-red-500' : 'text-[#38B2AC]'}`}>
                             {event.available_seats} seats
                           </span>
                         </div>
-
                         {waitlistCount > 0 && (
                           <div className="flex justify-between text-sm">
                             <span className="text-[#F6AD55]">Waitlist</span>
-                            <span className="font-medium text-[#F6AD55]">
-                              {waitlistCount} students
-                            </span>
+                            <span className="font-medium text-[#F6AD55]">{waitlistCount} students</span>
                           </div>
                         )}
                       </div>
@@ -379,12 +342,12 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* ── Analytics & Demand ── */}
         {activeTab === 'analytics' && (
           <div>
             <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
               Seat Utilization Analytics & Demand Insights
             </h2>
-
             {analytics.length === 0 ? (
               <Card hover={false} className="text-center py-16">
                 <p className="text-[#6B7280]">No analytics data available</p>
@@ -395,12 +358,9 @@ export const AdminDashboard: React.FC = () => {
                   <table className="w-full">
                     <thead className="bg-[#E0E5EC]">
                       <tr>
-                        <th className="text-left py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Workshop</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Total Seats</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Enrolled</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Waitlisted</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Utilization</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Demand Level</th>
+                        {['Workshop','Total Seats','Enrolled','Waitlisted','Utilization','Demand Level'].map(h => (
+                          <th key={h} className={`py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider ${h === 'Workshop' ? 'text-left' : 'text-center'}`}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E0E5EC]">
@@ -409,36 +369,21 @@ export const AdminDashboard: React.FC = () => {
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-[#3D4852]">{item.title}</span>
-                              {item.isMandatory && (
-                                <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-600">
-                                  Mandatory
-                                </span>
-                              )}
+                              {item.isMandatory && <span className="px-2 py-0.5 rounded text-xs bg-red-100 text-red-600">Mandatory</span>}
                             </div>
                             <span className="text-sm text-[#6B7280]">{item.type} • {item.date}</span>
                           </td>
-                          <td className="py-4 px-6 text-center font-medium text-[#3D4852]">
-                            {item.totalSeats}
-                          </td>
-                          <td className="py-4 px-6 text-center font-medium text-[#38B2AC]">
-                            {item.enrolledCount}
-                          </td>
-                          <td className="py-4 px-6 text-center font-medium text-[#F6AD55]">
-                            {item.waitlistCount}
-                          </td>
+                          <td className="py-4 px-6 text-center font-medium text-[#3D4852]">{item.totalSeats}</td>
+                          <td className="py-4 px-6 text-center font-medium text-[#38B2AC]">{item.enrolledCount}</td>
+                          <td className="py-4 px-6 text-center font-medium text-[#F6AD55]">{item.waitlistCount}</td>
                           <td className="py-4 px-6 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              <div className="w-16 h-2 rounded-full bg-[#E0E5EC] shadow-[inset_2px_2px_4px_rgb(163,177,198,0.6),inset_-2px_-2px_4px_rgba(255,255,255,0.5)] overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    item.utilizationPercent >= 80
-                                      ? 'bg-gradient-to-r from-red-500 to-red-400'
-                                      : item.utilizationPercent >= 50
-                                      ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
-                                      : 'bg-gradient-to-r from-green-500 to-green-400'
-                                  }`}
-                                  style={{ width: `${item.utilizationPercent}%` }}
-                                />
+                              <div className="w-16 h-2 rounded-full bg-[#E0E5EC] overflow-hidden">
+                                <div className={`h-full rounded-full ${
+                                  item.utilizationPercent >= 80 ? 'bg-gradient-to-r from-red-500 to-red-400'
+                                  : item.utilizationPercent >= 50 ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                                  : 'bg-gradient-to-r from-green-500 to-green-400'
+                                }`} style={{ width: `${item.utilizationPercent}%` }} />
                               </div>
                               <span className="font-medium text-[#3D4852]">{item.utilizationPercent}%</span>
                             </div>
@@ -455,66 +400,38 @@ export const AdminDashboard: React.FC = () => {
                 </Card>
               </div>
             )}
-
-            {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-              <Card hover={false}>
-                <h3 className="text-lg font-bold text-[#3D4852] mb-4">High Demand</h3>
-                <div className="space-y-2">
-                  {analytics.filter(a => a.demandLevel === 'High').length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No high-demand workshops</p>
-                  ) : (
-                    analytics.filter(a => a.demandLevel === 'High').map(a => (
-                      <div key={a.eventId} className="flex items-center justify-between p-2 rounded-xl bg-red-50">
+              {(['High', 'Medium', 'Low'] as const).map(level => (
+                <Card key={level} hover={false}>
+                  <h3 className="text-lg font-bold text-[#3D4852] mb-4">
+                    {level === 'Low' ? 'Under-Utilized' : `${level} Demand`}
+                  </h3>
+                  <div className="space-y-2">
+                    {analytics.filter(a => a.demandLevel === level).length === 0 ? (
+                      <p className="text-sm text-[#6B7280]">No {level.toLowerCase()}-demand workshops</p>
+                    ) : analytics.filter(a => a.demandLevel === level).map(a => (
+                      <div key={a.eventId} className={`flex items-center justify-between p-2 rounded-xl ${
+                        level === 'High' ? 'bg-red-50' : level === 'Medium' ? 'bg-yellow-50' : 'bg-green-50'
+                      }`}>
                         <span className="text-sm font-medium text-[#3D4852]">{a.title}</span>
-                        <span className="text-xs text-red-600">{a.utilizationPercent}%</span>
+                        <span className={`text-xs ${level === 'High' ? 'text-red-600' : level === 'Medium' ? 'text-yellow-600' : 'text-green-600'}`}>
+                          {a.utilizationPercent}%
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-
-              <Card hover={false}>
-                <h3 className="text-lg font-bold text-[#3D4852] mb-4">Medium Demand</h3>
-                <div className="space-y-2">
-                  {analytics.filter(a => a.demandLevel === 'Medium').length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No medium-demand workshops</p>
-                  ) : (
-                    analytics.filter(a => a.demandLevel === 'Medium').map(a => (
-                      <div key={a.eventId} className="flex items-center justify-between p-2 rounded-xl bg-yellow-50">
-                        <span className="text-sm font-medium text-[#3D4852]">{a.title}</span>
-                        <span className="text-xs text-yellow-600">{a.utilizationPercent}%</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-
-              <Card hover={false}>
-                <h3 className="text-lg font-bold text-[#3D4852] mb-4">Under-Utilized</h3>
-                <div className="space-y-2">
-                  {analytics.filter(a => a.demandLevel === 'Low').length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No under-utilized workshops</p>
-                  ) : (
-                    analytics.filter(a => a.demandLevel === 'Low').map(a => (
-                      <div key={a.eventId} className="flex items-center justify-between p-2 rounded-xl bg-green-50">
-                        <span className="text-sm font-medium text-[#3D4852]">{a.title}</span>
-                        <span className="text-xs text-green-600">{a.utilizationPercent}%</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
+                    ))}
+                  </div>
+                </Card>
+              ))}
             </div>
           </div>
         )}
 
+        {/* ── Enrolled Students (original tab) ── */}
         {activeTab === 'users' && (
           <div>
             <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
               Enrolled Students ({users.filter(u => u.role === 'student').length})
             </h2>
-
             {users.filter(u => u.role === 'student').length === 0 ? (
               <Card hover={false} className="text-center py-16">
                 <div className="w-20 h-20 mx-auto rounded-full bg-[#E0E5EC] flex items-center justify-center shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] mb-6">
@@ -529,15 +446,11 @@ export const AdminDashboard: React.FC = () => {
               <div className="space-y-4">
                 {users.filter(u => u.role === 'student').map((student) => {
                   const userEvents = getUserRegistrations(student.id);
-                  
                   return (
                     <Card key={student.id} className="flex flex-col md:flex-row md:items-center gap-4">
-                      {/* Avatar */}
                       <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center text-white font-bold text-xl shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]">
                         {student.name.charAt(0).toUpperCase()}
                       </div>
-
-                      {/* Info */}
                       <div className="flex-1">
                         <h3 className="font-bold text-[#3D4852]">{student.name}</h3>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#6B7280]">
@@ -546,26 +459,13 @@ export const AdminDashboard: React.FC = () => {
                           <span>{student.department}</span>
                         </div>
                       </div>
-
-                      {/* Registered Events */}
                       <div className="flex flex-wrap gap-2">
-                        {userEvents.length > 0 ? (
-                          userEvents.map((event) => (
-                            <span 
-                              key={event?.id}
-                              className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                event?.type === 'Workshop'
-                                  ? 'bg-[#6C63FF]/10 text-[#6C63FF]'
-                                  : 'bg-[#38B2AC]/10 text-[#38B2AC]'
-                              }`}
-                            >
-                              {event?.title}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
-                            No enrollments
-                          </span>
+                        {userEvents.length > 0 ? userEvents.map((event) => (
+                          <span key={event?.id} className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            event?.type === 'Workshop' ? 'bg-[#6C63FF]/10 text-[#6C63FF]' : 'bg-[#38B2AC]/10 text-[#38B2AC]'
+                          }`}>{event?.title}</span>
+                        )) : (
+                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No enrollments</span>
                         )}
                       </div>
                     </Card>
@@ -576,13 +476,202 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'compliance' && (
+        {/* ── ALL USERS (new tab) ── */}
+        {activeTab === 'all-users' && (
           <div>
             <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
-              Academic Compliance Tracking
+              All Users ({filteredStudents.length} of {studentCount})
             </h2>
 
-            {/* Compliance Summary */}
+            {/* Search + Department filter */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-8">
+              {/* Search box */}
+              <div className="relative flex-1">
+                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="Search by name or reg number..."
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 rounded-2xl bg-[#E0E5EC] text-[#3D4852] placeholder-[#9CA3AF] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] focus:outline-none focus:ring-2 focus:ring-[#6C63FF]/30"
+                />
+                {userSearch && (
+                  <button onClick={() => setUserSearch('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#6B7280] hover:text-[#3D4852]">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Department filter */}
+              <div className="flex items-center gap-1 bg-[#E0E5EC] rounded-2xl p-1 shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] overflow-x-auto">
+                {allDepartments.map(dept => (
+                  <button
+                    key={dept}
+                    onClick={() => setUserDeptFilter(dept)}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 ${
+                      userDeptFilter === dept
+                        ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[3px_3px_6px_rgb(163,177,198,0.5),-3px_-3px_6px_rgba(255,255,255,0.4)]'
+                        : 'text-[#6B7280] hover:text-[#3D4852]'
+                    }`}
+                  >
+                    {dept}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* User cards */}
+            {filteredStudents.length === 0 ? (
+              <Card hover={false} className="text-center py-16">
+                <div className="w-16 h-16 mx-auto rounded-full bg-[#E0E5EC] flex items-center justify-center shadow-[inset_4px_4px_8px_rgb(163,177,198,0.6),inset_-4px_-4px_8px_rgba(255,255,255,0.5)] mb-4">
+                  <svg className="w-8 h-8 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <p className="text-[#3D4852] font-medium mb-1">No users found</p>
+                <p className="text-sm text-[#6B7280]">Try adjusting your search or department filter</p>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {filteredStudents.map((student) => {
+                  const userEvents    = getUserRegistrations(student.id);
+                  const userCompliance = getComplianceForUser(student.id);
+                  const isExpanded    = expandedUser === student.id;
+
+                  return (
+                    <Card key={student.id} hover={false} className="overflow-hidden">
+                      {/* ── Main row ── */}
+                      <div
+                        className="flex flex-col md:flex-row md:items-center gap-4 cursor-pointer"
+                        onClick={() => setExpandedUser(isExpanded ? null : student.id)}
+                      >
+                        {/* Avatar */}
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center text-white font-bold text-lg shadow-[4px_4px_8px_rgb(163,177,198,0.6),-4px_-4px_8px_rgba(255,255,255,0.5)] flex-shrink-0">
+                          {student.name.charAt(0).toUpperCase()}
+                        </div>
+
+                        {/* Name + reg + dept */}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-[#3D4852] truncate">{student.name}</h3>
+                          <div className="flex flex-wrap gap-x-3 text-sm text-[#6B7280]">
+                            <span>{student.reg_no}</span>
+                            <span>•</span>
+                            <span>{student.department}</span>
+                          </div>
+                        </div>
+
+                        {/* Quick stats */}
+                        <div className="flex items-center gap-4 flex-shrink-0">
+                          {/* Enrolled count */}
+                          <div className="text-center">
+                            <p className="text-lg font-bold text-[#6C63FF]">{userEvents.length}</p>
+                            <p className="text-xs text-[#6B7280]">Enrolled</p>
+                          </div>
+
+                          {/* Compliance badge */}
+                          <div className="text-center">
+                            {userCompliance ? (
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                userCompliance.isCompliant
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {userCompliance.isCompliant ? '✓ Compliant' : `${userCompliance.compliancePercent}% done`}
+                              </span>
+                            ) : (
+                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                No data
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Expand chevron */}
+                          <svg
+                            className={`w-5 h-5 text-[#6B7280] transition-transform duration-300 flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+
+                      {/* ── Expanded detail panel ── */}
+                      {isExpanded && (
+                        <div className="mt-4 pt-4 border-t border-[#E0E5EC] space-y-4">
+
+                          {/* Enrolled Workshops */}
+                          <div>
+                            <p className="text-sm font-medium text-[#3D4852] mb-2">
+                              Enrolled Workshops ({userEvents.length})
+                            </p>
+                            {userEvents.length === 0 ? (
+                              <p className="text-sm text-[#6B7280]">Not enrolled in any workshops</p>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                {userEvents.map(event => (
+                                  <div key={event.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#6C63FF]/10">
+                                    <span className="text-xs font-medium text-[#6C63FF]">{event.title}</span>
+                                    {event.is_mandatory && (
+                                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Compliance detail */}
+                          {userCompliance && (
+                            <div>
+                              <p className="text-sm font-medium text-[#3D4852] mb-2">
+                                Compliance — {userCompliance.completedMandatory}/{userCompliance.totalMandatory} mandatory workshops completed
+                              </p>
+                              {/* Progress bar */}
+                              <div className="h-2 rounded-full bg-[#E0E5EC] shadow-[inset_2px_2px_4px_rgb(163,177,198,0.6),inset_-2px_-2px_4px_rgba(255,255,255,0.5)] overflow-hidden mb-3">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    userCompliance.compliancePercent === 100
+                                      ? 'bg-gradient-to-r from-green-500 to-green-400'
+                                      : userCompliance.compliancePercent >= 50
+                                      ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                                      : 'bg-gradient-to-r from-red-500 to-red-400'
+                                  }`}
+                                  style={{ width: `${userCompliance.compliancePercent}%` }}
+                                />
+                              </div>
+                              {/* Pending workshops list */}
+                              {userCompliance.pendingWorkshops.length > 0 && (
+                                <div>
+                                  <p className="text-xs text-[#6B7280] mb-1">Pending mandatory workshops:</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {userCompliance.pendingWorkshops.map(w => (
+                                      <span key={w} className="px-2 py-1 rounded-lg text-xs font-medium bg-red-50 text-red-600">
+                                        {w}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Compliance Tracking ── */}
+        {activeTab === 'compliance' && (
+          <div>
+            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">Academic Compliance Tracking</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               <Card hover={false} className="text-center">
                 <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#38B2AC] to-[#4FD1C5] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] mb-4">
@@ -591,7 +680,6 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="text-lg font-bold text-[#3D4852]">Compliant</h3>
                 <p className="text-sm text-[#6B7280]">Students meeting all requirements</p>
               </Card>
-
               <Card hover={false} className="text-center">
                 <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#FC8181] to-[#F56565] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] mb-4">
                   <span className="text-2xl font-bold text-white">{studentCount - compliantStudents}</span>
@@ -599,7 +687,6 @@ export const AdminDashboard: React.FC = () => {
                 <h3 className="text-lg font-bold text-[#3D4852]">Pending</h3>
                 <p className="text-sm text-[#6B7280]">Students with incomplete requirements</p>
               </Card>
-
               <Card hover={false} className="text-center">
                 <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] mb-4">
                   <span className="text-2xl font-bold text-white">
@@ -611,7 +698,6 @@ export const AdminDashboard: React.FC = () => {
               </Card>
             </div>
 
-            {/* Student Compliance List */}
             {compliance.length === 0 ? (
               <Card hover={false} className="text-center py-16">
                 <p className="text-[#6B7280]">No compliance data available</p>
@@ -622,12 +708,9 @@ export const AdminDashboard: React.FC = () => {
                   <table className="w-full">
                     <thead className="bg-[#E0E5EC]">
                       <tr>
-                        <th className="text-left py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Student</th>
-                        <th className="text-left py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Department</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Completed</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Pending</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Progress</th>
-                        <th className="text-center py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider">Status</th>
+                        {['Student','Department','Completed','Pending','Progress','Status'].map(h => (
+                          <th key={h} className={`py-4 px-6 text-sm font-medium text-[#6B7280] uppercase tracking-wider ${h === 'Student' || h === 'Department' ? 'text-left' : 'text-center'}`}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E0E5EC]">
@@ -645,42 +728,31 @@ export const AdminDashboard: React.FC = () => {
                             </div>
                           </td>
                           <td className="py-4 px-6 text-[#6B7280]">{student.department}</td>
-                          <td className="py-4 px-6 text-center font-medium text-[#38B2AC]">
-                            {student.completedMandatory}
-                          </td>
+                          <td className="py-4 px-6 text-center font-medium text-[#38B2AC]">{student.completedMandatory}</td>
                           <td className="py-4 px-6 text-center">
-                            <div>
-                              <span className="font-medium text-[#FC8181]">{student.pendingMandatory}</span>
-                              {student.pendingWorkshops.length > 0 && (
-                                <p className="text-xs text-[#6B7280] mt-1">
-                                  {student.pendingWorkshops.slice(0, 2).join(', ')}
-                                  {student.pendingWorkshops.length > 2 && '...'}
-                                </p>
-                              )}
-                            </div>
+                            <span className="font-medium text-[#FC8181]">{student.pendingMandatory}</span>
+                            {student.pendingWorkshops.length > 0 && (
+                              <p className="text-xs text-[#6B7280] mt-1">
+                                {student.pendingWorkshops.slice(0, 2).join(', ')}
+                                {student.pendingWorkshops.length > 2 && '...'}
+                              </p>
+                            )}
                           </td>
                           <td className="py-4 px-6">
                             <div className="flex items-center justify-center gap-2">
-                              <div className="w-16 h-2 rounded-full bg-[#E0E5EC] shadow-[inset_2px_2px_4px_rgb(163,177,198,0.6),inset_-2px_-2px_4px_rgba(255,255,255,0.5)] overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    student.compliancePercent === 100
-                                      ? 'bg-gradient-to-r from-green-500 to-green-400'
-                                      : student.compliancePercent >= 50
-                                      ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
-                                      : 'bg-gradient-to-r from-red-500 to-red-400'
-                                  }`}
-                                  style={{ width: `${student.compliancePercent}%` }}
-                                />
+                              <div className="w-16 h-2 rounded-full bg-[#E0E5EC] overflow-hidden">
+                                <div className={`h-full rounded-full ${
+                                  student.compliancePercent === 100 ? 'bg-gradient-to-r from-green-500 to-green-400'
+                                  : student.compliancePercent >= 50 ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
+                                  : 'bg-gradient-to-r from-red-500 to-red-400'
+                                }`} style={{ width: `${student.compliancePercent}%` }} />
                               </div>
                               <span className="text-sm font-medium text-[#3D4852]">{student.compliancePercent}%</span>
                             </div>
                           </td>
                           <td className="py-4 px-6 text-center">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              student.isCompliant 
-                                ? 'bg-green-100 text-green-700'
-                                : 'bg-red-100 text-red-700'
+                              student.isCompliant ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                             }`}>
                               {student.isCompliant ? 'Compliant' : 'Pending'}
                             </span>
