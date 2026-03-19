@@ -104,13 +104,11 @@ export const getUserDocument = async (uid: string) => {
   return null;
 };
 
-// Update user role
 export const updateUserRole = async (uid: string, role: 'student' | 'admin') => {
   const userRef = doc(db, 'users', uid);
   return updateDoc(userRef, { role });
 };
 
-// Create user document if doesn't exist (for Google sign-in of existing admin)
 export const createOrUpdateUserDocument = async (
   uid: string,
   email: string,
@@ -119,17 +117,14 @@ export const createOrUpdateUserDocument = async (
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
   
-  // Determine role based on email
   const role = email === ADMIN_EMAIL ? 'admin' : 'student';
   
   if (userSnap.exists()) {
-    // Update role if this is the admin email
     if (email === ADMIN_EMAIL && userSnap.data().role !== 'admin') {
       await updateDoc(userRef, { role: 'admin' });
     }
     return { id: userSnap.id, ...userSnap.data(), role };
   } else {
-    // Create new user document
     const userData = {
       name: data.name,
       reg_no: data.reg_no || '',
@@ -165,7 +160,7 @@ export interface EventData {
   available_seats: number;
   status: 'Upcoming' | 'Closed';
   is_mandatory: boolean;
-  target_branches: string[]; // Empty array means all branches
+  target_branches: string[];
   created_at?: Timestamp;
 }
 
@@ -198,6 +193,30 @@ export const updateEvent = async (eventId: string, data: Partial<EventData>) => 
   return updateDoc(eventRef, data);
 };
 
+// ─── NEW: Delete an event and all its registrations/waitlist entries ───
+export const deleteEvent = async (eventId: string): Promise<void> => {
+  const eventRef         = doc(db, 'events', eventId);
+  const registrationsRef = collection(db, 'registrations');
+  const waitlistRef      = collection(db, 'waitlist');
+
+  const [regSnap, waitSnap] = await Promise.all([
+    getDocs(query(registrationsRef, where('event_id', '==', eventId))),
+    getDocs(query(waitlistRef,      where('event_id', '==', eventId))),
+  ]);
+
+  const allRefs = [
+    ...regSnap.docs.map(d => d.ref),
+    ...waitSnap.docs.map(d => d.ref),
+    eventRef,
+  ];
+
+  // Delete in chunks of 499 to stay within Firestore limits
+  const CHUNK = 499;
+  for (let i = 0; i < allRefs.length; i += CHUNK) {
+    await Promise.all(allRefs.slice(i, i + CHUNK).map(ref => deleteDoc(ref)));
+  }
+};
+
 // Real-time event listener
 export const subscribeToEvents = (callback: (events: DocumentData[]) => void) => {
   const eventsRef = collection(db, 'events');
@@ -212,7 +231,6 @@ export const subscribeToEvents = (callback: (events: DocumentData[]) => void) =>
 // REGISTRATION FUNCTIONS
 // ============================================
 
-// Check for time slot conflicts
 export const checkTimeConflict = async (
   userId: string, 
   eventDate: string, 
@@ -220,7 +238,6 @@ export const checkTimeConflict = async (
   endTime: string,
   excludeEventId?: string
 ): Promise<{ hasConflict: boolean; conflictingEvent?: string }> => {
-  // Get user's registrations
   const registrationsRef = collection(db, 'registrations');
   const q = query(registrationsRef, where('user_id', '==', userId));
   const registrations = await getDocs(q);
@@ -229,7 +246,6 @@ export const checkTimeConflict = async (
     return { hasConflict: false };
   }
 
-  // Get all events the user is registered for
   const eventIds = registrations.docs.map(doc => doc.data().event_id);
   
   for (const eventId of eventIds) {
@@ -240,13 +256,10 @@ export const checkTimeConflict = async (
     
     const event = eventDoc.data();
     
-    // Check if same date
     if (event.date === eventDate) {
-      // Check time overlap
       const existingStart = event.start_time || '00:00';
       const existingEnd = event.end_time || '23:59';
       
-      // Check if times overlap
       if (
         (startTime >= existingStart && startTime < existingEnd) ||
         (endTime > existingStart && endTime <= existingEnd) ||
@@ -260,13 +273,11 @@ export const checkTimeConflict = async (
   return { hasConflict: false };
 };
 
-// Register for event with waitlist support
 export const registerForEvent = async (userId: string, eventId: string, userDepartment: string) => {
   const eventRef = doc(db, 'events', eventId);
   const registrationsRef = collection(db, 'registrations');
   const waitlistRef = collection(db, 'waitlist');
   
-  // Check for duplicate registration
   const regQuery = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const existingReg = await getDocs(regQuery);
   
@@ -274,7 +285,6 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
     throw new Error('Already registered for this workshop');
   }
   
-  // Check if already on waitlist
   const waitlistQuery = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const existingWaitlist = await getDocs(waitlistQuery);
   
@@ -282,7 +292,6 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
     throw new Error('Already on the waitlist for this workshop');
   }
   
-  // Get event details for conflict check
   const eventDoc = await getDoc(eventRef);
   if (!eventDoc.exists()) {
     throw new Error('Workshop does not exist');
@@ -290,14 +299,12 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
   
   const eventData = eventDoc.data();
   
-  // Check branch eligibility
   if (eventData.target_branches && eventData.target_branches.length > 0) {
     if (!eventData.target_branches.includes(userDepartment)) {
       throw new Error('This workshop is not available for your department');
     }
   }
   
-  // Check for time conflicts
   const conflictResult = await checkTimeConflict(
     userId, 
     eventData.date, 
@@ -309,7 +316,6 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
     throw new Error(`Time conflict with: ${conflictResult.conflictingEvent}`);
   }
   
-  // Use transaction to ensure seat availability
   return runTransaction(db, async (transaction) => {
     const eventDoc = await transaction.get(eventRef);
     
@@ -320,7 +326,6 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
     const eventData = eventDoc.data();
     
     if (eventData.available_seats > 0) {
-      // Seat available - register directly
       transaction.update(eventRef, {
         available_seats: eventData.available_seats - 1
       });
@@ -335,7 +340,6 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
       
       return { status: 'registered', message: 'Successfully registered!' };
     } else {
-      // No seats - add to waitlist
       const waitlistCount = await getDocs(query(waitlistRef, where('event_id', '==', eventId)));
       
       const newWaitlistRef = doc(waitlistRef);
@@ -352,23 +356,19 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
   });
 };
 
-// Cancel registration and auto-promote from waitlist
 export const cancelRegistration = async (userId: string, eventId: string) => {
   const eventRef = doc(db, 'events', eventId);
   const registrationsRef = collection(db, 'registrations');
   const waitlistRef = collection(db, 'waitlist');
   
-  // Find the registration
   const regQuery = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const regSnapshot = await getDocs(regQuery);
   
   if (regSnapshot.empty) {
-    // Check if on waitlist
     const waitlistQuery = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
     const waitlistSnapshot = await getDocs(waitlistQuery);
     
     if (!waitlistSnapshot.empty) {
-      // Remove from waitlist
       await deleteDoc(waitlistSnapshot.docs[0].ref);
       return { status: 'removed_from_waitlist' };
     }
@@ -377,15 +377,9 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
   
   const registrationDoc = regSnapshot.docs[0];
   
-  // Get waitlist BEFORE transaction (getDocs not allowed inside transaction)
-  // Get waitlist ordered by timestamp (oldest first) instead of position to avoid index requirement
-  const waitlistQuery = query(
-    waitlistRef, 
-    where('event_id', '==', eventId)
-  );
+  const waitlistQuery = query(waitlistRef, where('event_id', '==', eventId));
   const waitlistSnapshot = await getDocs(waitlistQuery);
   
-  // Sort by position locally
   const sortedWaitlist = waitlistSnapshot.docs.sort((a, b) => {
     const posA = a.data().position || 0;
     const posB = b.data().position || 0;
@@ -394,7 +388,6 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
   
   const nextInLine = sortedWaitlist.length > 0 ? sortedWaitlist[0] : null;
   
-  // Use transaction for atomicity
   return runTransaction(db, async (transaction) => {
     const eventDoc = await transaction.get(eventRef);
     
@@ -404,14 +397,11 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
     
     const eventData = eventDoc.data();
     
-    // Delete registration
     transaction.delete(registrationDoc.ref);
     
     if (nextInLine) {
-      // Promote first person from waitlist
       const nextUserId = nextInLine.data().user_id;
       
-      // Create registration for next person
       const newRegRef = doc(registrationsRef);
       transaction.set(newRegRef, {
         user_id: nextUserId,
@@ -421,16 +411,13 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
         promoted_from_waitlist: true
       });
       
-      // Remove from waitlist
       transaction.delete(nextInLine.ref);
       
-      // Keep available_seats at 0 (seat taken by promoted person)
       return { 
         status: 'cancelled_and_promoted', 
         promotedUserId: nextUserId 
       };
     } else {
-      // No one on waitlist - increment available seats
       transaction.update(eventRef, {
         available_seats: eventData.available_seats + 1
       });
@@ -440,7 +427,6 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
   });
 };
 
-// Check if user is registered for an event
 export const checkRegistration = async (userId: string, eventId: string): Promise<boolean> => {
   const registrationsRef = collection(db, 'registrations');
   const q = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
@@ -448,7 +434,6 @@ export const checkRegistration = async (userId: string, eventId: string): Promis
   return !querySnapshot.empty;
 };
 
-// Check if user is on waitlist
 export const checkWaitlist = async (userId: string, eventId: string): Promise<{ onWaitlist: boolean; position?: number }> => {
   const waitlistRef = collection(db, 'waitlist');
   const q = query(waitlistRef, where('user_id', '==', userId), where('event_id', '==', eventId));
@@ -464,7 +449,6 @@ export const checkWaitlist = async (userId: string, eventId: string): Promise<{ 
   };
 };
 
-// Get user's registrations
 export const getUserRegistrations = async (userId: string) => {
   const registrationsRef = collection(db, 'registrations');
   const q = query(registrationsRef, where('user_id', '==', userId));
@@ -472,7 +456,6 @@ export const getUserRegistrations = async (userId: string) => {
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
-// Get user's waitlist entries
 export const getUserWaitlist = async (userId: string) => {
   const waitlistRef = collection(db, 'waitlist');
   const q = query(waitlistRef, where('user_id', '==', userId));
@@ -484,21 +467,18 @@ export const getUserWaitlist = async (userId: string) => {
 // ADMIN FUNCTIONS
 // ============================================
 
-// Get all users
 export const getAllUsers = async () => {
   const usersRef = collection(db, 'users');
   const querySnapshot = await getDocs(usersRef);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
-// Get all registrations
 export const getAllRegistrations = async () => {
   const registrationsRef = collection(db, 'registrations');
   const querySnapshot = await getDocs(registrationsRef);
   return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
-// Real-time registrations listener
 export const subscribeToRegistrations = (callback: (registrations: DocumentData[]) => void) => {
   const registrationsRef = collection(db, 'registrations');
   return onSnapshot(registrationsRef, (snapshot) => {
@@ -507,7 +487,6 @@ export const subscribeToRegistrations = (callback: (registrations: DocumentData[
   });
 };
 
-// Real-time waitlist listener
 export const subscribeToWaitlist = (callback: (waitlist: DocumentData[]) => void) => {
   const waitlistRef = collection(db, 'waitlist');
   return onSnapshot(waitlistRef, (snapshot) => {
@@ -516,7 +495,6 @@ export const subscribeToWaitlist = (callback: (waitlist: DocumentData[]) => void
   });
 };
 
-// Subscribe to users
 export const subscribeToUsers = (callback: (users: DocumentData[]) => void) => {
   const usersRef = collection(db, 'users');
   return onSnapshot(usersRef, (snapshot) => {
@@ -574,7 +552,6 @@ export const getEventAnalytics = async (): Promise<EventAnalytics[]> => {
       ? Math.round((enrolledCount / event.total_seats) * 100)
       : 0;
     
-    // Determine demand level
     let demandLevel: 'High' | 'Medium' | 'Low' = 'Low';
     if (utilizationPercent >= 80 || waitlistCount > 0) {
       demandLevel = 'High';
@@ -644,7 +621,6 @@ export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
     const user = userDoc.data();
     const userRegs = registrationsByUser[userDoc.id] || new Set();
     
-    // Filter mandatory events for this user's department
     const relevantMandatory = mandatoryEvents.filter(event => {
       const branches = (event as { target_branches?: string[] }).target_branches || [];
       return branches.length === 0 || branches.includes(user.department);
@@ -678,7 +654,6 @@ export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
   });
 };
 
-// Get student's own compliance status
 export const getStudentCompliance = async (userId: string, department: string): Promise<{
   mandatory: { event: DocumentData; completed: boolean }[];
   compliancePercent: number;
