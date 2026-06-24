@@ -137,9 +137,6 @@ export const checkRegNoExists = async (regNo: string): Promise<boolean> => {
 };
 
 // ─── Block / Unblock a student ────────────────────────────────
-// Sets a `is_blocked: true/false` flag on the user document.
-// Blocked students can still log in but cannot register for workshops.
-
 export const blockUser = async (uid: string): Promise<void> => {
   const userRef = doc(db, 'users', uid);
   await updateDoc(userRef, { is_blocked: true });
@@ -560,6 +557,8 @@ export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
 
   const registrationsByUser: Record<string, Set<string>> = {};
   regsSnap.docs.forEach(doc => {
+    // ✅ Only count confirmed registrations
+    if (doc.data().status !== 'confirmed') return;
     const userId  = doc.data().user_id;
     const eventId = doc.data().event_id;
     if (!registrationsByUser[userId]) registrationsByUser[userId] = new Set();
@@ -599,6 +598,7 @@ export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
   });
 };
 
+// ✅ FIXED: getStudentCompliance now only counts confirmed registrations
 export const getStudentCompliance = async (userId: string, department: string): Promise<{
   mandatory: { event: DocumentData; completed: boolean }[];
   compliancePercent: number;
@@ -609,9 +609,15 @@ export const getStudentCompliance = async (userId: string, department: string): 
 
   const [eventsSnap, regsSnap] = await Promise.all([
     getDocs(query(eventsRef, where('is_mandatory', '==', true))),
-    getDocs(query(registrationsRef, where('user_id', '==', userId)))
+    // ✅ FIX: Only fetch confirmed registrations, not waitlisted ones
+    getDocs(query(
+      registrationsRef,
+      where('user_id', '==', userId),
+      where('status', '==', 'confirmed')
+    ))
   ]);
 
+  // ✅ FIX: Build Set from confirmed registrations only
   const userEventIds = new Set(regsSnap.docs.map(doc => doc.data().event_id));
 
   const mandatoryEvents = eventsSnap.docs
@@ -622,6 +628,7 @@ export const getStudentCompliance = async (userId: string, department: string): 
     })
     .map(doc => ({
       event: { id: doc.id, ...doc.data() },
+      // ✅ FIX: completed is true only if the student has a confirmed registration
       completed: userEventIds.has(doc.id)
     }));
 
