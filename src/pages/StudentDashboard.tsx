@@ -1,6 +1,6 @@
 // Student Dashboard Page - Enhanced with Waitlist, Compliance, Branch-specific features, and Block handling
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Card } from '@/components/ui/Card';
@@ -28,6 +28,9 @@ interface EventData {
   status: 'Upcoming' | 'Closed';
   is_mandatory?: boolean;
   target_branches?: string[];
+  images?: string[];
+  location?: { address: string; lat: number; lng: number };
+  registration_fee?: number;
 }
 
 interface ComplianceData {
@@ -396,6 +399,14 @@ export const StudentDashboard: React.FC = () => {
 
                   return (
                     <Card key={event.id} className="flex flex-col">
+                      {event.images?.[0] && (
+                        <img
+                          src={event.images[0]}
+                          alt={event.title}
+                          className="w-full h-36 object-cover rounded-2xl mb-4"
+                        />
+                      )}
+
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                           <span className="px-4 py-1.5 rounded-full text-sm font-medium bg-[#6C63FF]/10 text-[#6C63FF]">Workshop</span>
@@ -408,7 +419,9 @@ export const StudentDashboard: React.FC = () => {
                         </span>
                       </div>
 
-                      <h3 className="font-display font-bold text-xl text-[#3D4852] mb-3">{event.title}</h3>
+                      <Link to={`/event/${event.id}`} className="hover:underline">
+                        <h3 className="font-display font-bold text-xl text-[#3D4852] mb-3">{event.title}</h3>
+                      </Link>
 
                       <div className="flex items-center gap-2 text-[#6B7280] mb-2">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -437,7 +450,13 @@ export const StudentDashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="mt-auto">
+                      <div className="mt-auto space-y-2">
+                        <Link to={`/event/${event.id}`}>
+                          <Button variant="secondary" size="sm" className="w-full">
+                            View Details
+                          </Button>
+                        </Link>
+
                         {isRegistered ? (
                           <div className="space-y-2">
                             <Button variant="secondary" className="w-full" disabled>

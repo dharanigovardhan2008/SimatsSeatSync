@@ -73,6 +73,18 @@ export const Navbar: React.FC = () => {
                     </Link>
                   </>
                 )}
+                {userData.role === 'coordinator' && (
+                  <Link
+                    to="/coordinator"
+                    className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                      isActive('/coordinator')
+                        ? 'text-[#6C63FF] bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
+                        : 'text-[#6B7280] hover:text-[#3D4852]'
+                    }`}
+                  >
+                    My Events
+                  </Link>
+                )}
               </>
             )}
           </div>
@@ -166,6 +178,16 @@ export const Navbar: React.FC = () => {
                         Workshops
                       </Link>
                     </>
+                  )}
+
+                  {userData.role === 'coordinator' && (
+                    <Link
+                      to="/coordinator"
+                      className="px-4 py-3 rounded-xl font-medium text-[#3D4852] hover:bg-[#E0E5EC] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] transition-all"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      My Events
+                    </Link>
                   )}
                   
                   <Button variant="secondary" onClick={handleLogout} className="mt-2">

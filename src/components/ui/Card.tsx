@@ -1,4 +1,4 @@
-// Neumorphic Card Component
+// Premium Glassmorphism Card Component
 import React from 'react';
 import { cn } from '@/utils/cn';
 
@@ -19,10 +19,21 @@ export const Card: React.FC<CardProps> = ({
     <div
       onClick={onClick}
       className={cn(
-        'rounded-[32px] p-8 bg-[#E0E5EC] transition-all duration-300 ease-out',
-        'shadow-[9px_9px_16px_rgb(163,177,198,0.6),-9px_-9px_16px_rgba(255,255,255,0.5)]',
-        hover && 'hover:-translate-y-1 hover:shadow-[12px_12px_20px_rgb(163,177,198,0.7),-12px_-12px_20px_rgba(255,255,255,0.6)]',
-        onClick && 'cursor-pointer',
+        // Base structure & spacing
+        'rounded-[32px] p-6 md:p-8 transition-all duration-300 ease-out',
+        
+        // Glassmorphism effects
+        'bg-[rgba(255,255,255,0.60)] backdrop-blur-[20px] border border-[rgba(255,255,255,0.70)]',
+        
+        // Premium subtle shadow
+        'shadow-[0_10px_40px_rgba(0,0,0,0.06)]',
+        
+        // Hover interactions
+        hover && 'hover:-translate-y-1 hover:shadow-[0_15px_50px_rgba(0,0,0,0.08)] hover:bg-[rgba(255,255,255,0.65)]',
+        
+        // Clickability
+        onClick && 'cursor-pointer active:scale-[0.99] active:shadow-[0_5px_20px_rgba(0,0,0,0.04)]',
+        
         className
       )}
     >

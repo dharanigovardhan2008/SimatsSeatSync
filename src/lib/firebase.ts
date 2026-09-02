@@ -39,6 +39,8 @@ export const DEPARTMENTS = [
   'IT', 'ECE', 'EEE', 'BME', 'BI', 'CYBER SECURITY'
 ];
 
+export type UserRole = 'student' | 'admin' | 'coordinator';
+
 const firebaseConfig = {
   apiKey: "AIzaSyAOOgIBLgcUOzRkbq2Y5i2IKI11eRH7rbk",
   authDomain: "seatsync-aaa2b.firebaseapp.com",
@@ -82,7 +84,7 @@ export const onAuthChange = (callback: (user: User | null) => void) => {
 
 export const createUserDocument = async (
   uid: string, 
-  data: { name: string; reg_no: string; department: string; role: 'student' | 'admin'; email?: string }
+  data: { name: string; reg_no: string; department: string; role: UserRole; email?: string }
 ) => {
   const userRef = doc(db, 'users', uid);
   await setDoc(userRef, { ...data, created_at: serverTimestamp() });
@@ -97,7 +99,7 @@ export const getUserDocument = async (uid: string) => {
   return null;
 };
 
-export const updateUserRole = async (uid: string, role: 'student' | 'admin') => {
+export const updateUserRole = async (uid: string, role: UserRole) => {
   const userRef = doc(db, 'users', uid);
   return updateDoc(userRef, { role });
 };
@@ -105,16 +107,16 @@ export const updateUserRole = async (uid: string, role: 'student' | 'admin') => 
 export const createOrUpdateUserDocument = async (
   uid: string,
   email: string,
-  data: { name: string; reg_no?: string; department?: string }
+  data: { name: string; reg_no?: string; department?: string; role?: UserRole }
 ) => {
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
-  const role = email === ADMIN_EMAIL ? 'admin' : 'student';
+  const role: UserRole = email === ADMIN_EMAIL ? 'admin' : (data.role || 'student');
   if (userSnap.exists()) {
     if (email === ADMIN_EMAIL && userSnap.data().role !== 'admin') {
       await updateDoc(userRef, { role: 'admin' });
     }
-    return { id: userSnap.id, ...userSnap.data(), role };
+    return { id: userSnap.id, ...userSnap.data(), role: email === ADMIN_EMAIL ? 'admin' : userSnap.data().role };
   } else {
     const userData = {
       name: data.name,
@@ -151,30 +153,55 @@ export const unblockUser = async (uid: string): Promise<void> => {
 // EVENT/WORKSHOP FUNCTIONS
 // ============================================
 
+export interface EventLocation {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
+export interface EventTimelineItem {
+  time: string;   // e.g. "09:00 AM"
+  title: string;  // e.g. "Grand Opening Show"
+}
+
 export interface EventData {
   id?: string;
   title: string;
   type: 'Workshop' | 'Seminar';
+  about?: string;
+  images?: string[];               // Cloudinary URLs
+  location?: EventLocation;        // free-text address + lat/lng (OpenStreetMap)
   date: string;
   start_time?: string;
   end_time?: string;
   total_seats: number;
   available_seats: number;
+  registration_fee?: number;       // 0 = free
   status: 'Upcoming' | 'Closed';
   is_mandatory: boolean;
   target_branches: string[];
+  timeline?: EventTimelineItem[];
+  coordinator_id?: string;
+  coordinator_name?: string;
   created_at?: Timestamp;
 }
 
 export const createEvent = async (data: {
   title: string;
   type: 'Workshop' | 'Seminar';
+  about?: string;
+  images?: string[];
+  location?: EventLocation;
   date: string;
   start_time: string;
   end_time: string;
   total_seats: number;
+  registration_fee?: number;
   is_mandatory: boolean;
   target_branches: string[];
+  timeline?: EventTimelineItem[];
+  coordinator_id?: string;
+  coordinator_name?: string;
 }) => {
   const eventsRef = collection(db, 'events');
   return addDoc(eventsRef, {
@@ -220,6 +247,28 @@ export const deleteEvent = async (eventId: string): Promise<void> => {
 export const subscribeToEvents = (callback: (events: DocumentData[]) => void) => {
   const eventsRef = collection(db, 'events');
   const q = query(eventsRef, orderBy('date', 'asc'));
+  return onSnapshot(q, (snapshot) => {
+    const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    callback(events);
+  });
+};
+
+export const getEventById = async (eventId: string): Promise<DocumentData | null> => {
+  const eventSnap = await getDoc(doc(db, 'events', eventId));
+  if (!eventSnap.exists()) return null;
+  return { id: eventSnap.id, ...eventSnap.data() };
+};
+
+// ============================================
+// COORDINATOR FUNCTIONS
+// ============================================
+
+export const subscribeToCoordinatorEvents = (
+  coordinatorId: string,
+  callback: (events: DocumentData[]) => void
+) => {
+  const eventsRef = collection(db, 'events');
+  const q = query(eventsRef, where('coordinator_id', '==', coordinatorId));
   return onSnapshot(q, (snapshot) => {
     const events = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     callback(events);
@@ -323,7 +372,7 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
         timestamp: serverTimestamp(),
         status: 'confirmed'
       });
-      return { status: 'registered', message: 'Successfully registered!' };
+      return { status: 'registered' as const, message: 'Successfully registered!', registrationId: newRegRef.id };
     } else {
       const waitlistCount = await getDocs(query(waitlistRef, where('event_id', '==', eventId)));
       const newWaitlistRef = doc(waitlistRef);
@@ -334,7 +383,7 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
         timestamp: serverTimestamp(),
         status: 'waiting'
       });
-      return { status: 'waitlisted', message: 'Added to waitlist!' };
+      return { status: 'waitlisted' as const, message: 'Added to waitlist!', registrationId: undefined };
     }
   });
 };
@@ -395,6 +444,12 @@ export const checkRegistration = async (userId: string, eventId: string): Promis
   const q = query(registrationsRef, where('user_id', '==', userId), where('event_id', '==', eventId));
   const querySnapshot = await getDocs(q);
   return !querySnapshot.empty;
+};
+
+export const getRegistrationById = async (registrationId: string): Promise<DocumentData | null> => {
+  const regSnap = await getDoc(doc(db, 'registrations', registrationId));
+  if (!regSnap.exists()) return null;
+  return { id: regSnap.id, ...regSnap.data() };
 };
 
 export const checkWaitlist = async (userId: string, eventId: string): Promise<{ onWaitlist: boolean; position?: number }> => {
@@ -557,7 +612,6 @@ export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
 
   const registrationsByUser: Record<string, Set<string>> = {};
   regsSnap.docs.forEach(doc => {
-    // ✅ Only count confirmed registrations
     if (doc.data().status !== 'confirmed') return;
     const userId  = doc.data().user_id;
     const eventId = doc.data().event_id;
@@ -598,7 +652,6 @@ export const getComplianceStatus = async (): Promise<ComplianceStatus[]> => {
   });
 };
 
-// ✅ FIXED: getStudentCompliance now only counts confirmed registrations
 export const getStudentCompliance = async (userId: string, department: string): Promise<{
   mandatory: { event: DocumentData; completed: boolean }[];
   compliancePercent: number;
@@ -609,7 +662,6 @@ export const getStudentCompliance = async (userId: string, department: string): 
 
   const [eventsSnap, regsSnap] = await Promise.all([
     getDocs(query(eventsRef, where('is_mandatory', '==', true))),
-    // ✅ FIX: Only fetch confirmed registrations, not waitlisted ones
     getDocs(query(
       registrationsRef,
       where('user_id', '==', userId),
@@ -617,7 +669,6 @@ export const getStudentCompliance = async (userId: string, department: string): 
     ))
   ]);
 
-  // ✅ FIX: Build Set from confirmed registrations only
   const userEventIds = new Set(regsSnap.docs.map(doc => doc.data().event_id));
 
   const mandatoryEvents = eventsSnap.docs
@@ -628,7 +679,6 @@ export const getStudentCompliance = async (userId: string, department: string): 
     })
     .map(doc => ({
       event: { id: doc.id, ...doc.data() },
-      // ✅ FIX: completed is true only if the student has a confirmed registration
       completed: userEventIds.has(doc.id)
     }));
 

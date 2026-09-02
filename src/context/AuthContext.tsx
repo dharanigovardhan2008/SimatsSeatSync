@@ -2,14 +2,15 @@
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { type User } from 'firebase/auth';
 import { onAuthChange, getUserDocument, logout as firebaseLogout, createOrUpdateUserDocument, ADMIN_EMAIL } from '@/lib/firebase';
-
+import type { UserRole } from '@/lib/firebase';
 // User data interface matching Firestore structure
+
 interface UserData {
   id: string;
   name: string;
   reg_no: string;
   department: string;
-  role: 'student' | 'admin';
+  role: UserRole;
 }
 
 // Auth context interface

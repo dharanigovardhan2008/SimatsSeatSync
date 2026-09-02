@@ -1,4 +1,4 @@
-// Neumorphic Input Component
+// Premium Glassmorphism Input Component
 import React, { forwardRef } from 'react';
 import { cn } from '@/utils/cn';
 
@@ -10,28 +10,44 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className, ...props }, ref) => {
     return (
-      <div className="w-full">
+      <div className="w-full flex flex-col gap-1.5">
         {label && (
-          <label className="block text-sm font-medium text-[#3D4852] mb-2">
+          <label className="block text-sm font-semibold text-[#111111] ml-1 tracking-tight">
             {label}
           </label>
         )}
         <input
           ref={ref}
           className={cn(
-            'w-full px-5 py-4 rounded-2xl transition-all duration-300 ease-out',
-            'bg-[#E0E5EC] border-none text-[#3D4852]',
-            'shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)]',
-            'placeholder:text-[#A0AEC0]',
-            'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6C63FF] focus:ring-offset-[#E0E5EC]',
-            'focus:shadow-[inset_10px_10px_20px_rgb(163,177,198,0.7),inset_-10px_-10px_20px_rgba(255,255,255,0.6)]',
-            error && 'ring-2 ring-red-400',
+            // Sizing and Layout
+            'w-full px-5 py-4 min-h-[56px]',
+            'rounded-[20px]',
+            'transition-all duration-300 ease-out',
+            
+            // Glassmorphism Styling
+            'bg-[rgba(255,255,255,0.65)]',
+            'backdrop-blur-[16px]',
+            'border border-[rgba(0,0,0,0.08)]',
+            
+            // Typography
+            'text-[#111111] font-medium',
+            'placeholder:text-[#999999] placeholder:font-normal',
+            
+            // Focus State
+            'focus:outline-none focus:bg-[rgba(255,255,255,0.95)]',
+            'focus:border-[#111111] focus:ring-1 focus:ring-[#111111]',
+            
+            // Error State
+            error && 'border-red-400 bg-[rgba(255,255,255,0.9)] focus:border-red-500 focus:ring-red-500',
+            
             className
           )}
           {...props}
         />
         {error && (
-          <p className="mt-2 text-sm text-red-500">{error}</p>
+          <p className="text-[13px] font-medium text-red-500 ml-1 mt-0.5 tracking-tight">
+            {error}
+          </p>
         )}
       </div>
     );

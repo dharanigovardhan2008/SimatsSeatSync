@@ -30,6 +30,11 @@ const DEPARTMENTS = [
   { value: 'CYBER SECURITY', label: 'CYBER SECURITY' }
 ];
 
+const ROLES = [
+  { value: 'student', label: 'Student' },
+  { value: 'coordinator', label: 'Event Coordinator' }
+];
+
 export const Register: React.FC = () => {
   const [searchParams] = useSearchParams();
   const isGoogleRedirect = searchParams.get('google') === 'true';
@@ -42,7 +47,8 @@ export const Register: React.FC = () => {
     password: '',
     confirmPassword: '',
     regNo: '',
-    department: ''
+    department: '',
+    role: 'student' as 'student' | 'coordinator'
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,6 +60,8 @@ export const Register: React.FC = () => {
     if (!authLoading && user && userData) {
       if (userData.role === 'admin') {
         navigate('/admin');
+      } else if (userData.role === 'coordinator') {
+        navigate('/coordinator');
       } else {
         navigate('/student');
       }
@@ -115,8 +123,8 @@ export const Register: React.FC = () => {
       // Create auth user
       const result = await registerWithEmail(formData.email, formData.password);
 
-      // Determine role - check if this is the admin email
-      const role = formData.email === ADMIN_EMAIL ? 'admin' : 'student';
+      // Determine role - admin email always wins, otherwise use the picked role
+      const role = formData.email === ADMIN_EMAIL ? 'admin' : formData.role;
 
       // Create user document in Firestore
       await createUserDocument(result.user.uid, {
@@ -130,6 +138,8 @@ export const Register: React.FC = () => {
       // Navigate based on role
       if (role === 'admin') {
         navigate('/admin');
+      } else if (role === 'coordinator') {
+        navigate('/coordinator');
       } else {
         navigate('/student');
       }
@@ -159,6 +169,8 @@ export const Register: React.FC = () => {
         const existingUser = userDoc as { id: string; role: string };
         if (existingUser.role === 'admin') {
           navigate('/admin');
+        } else if (existingUser.role === 'coordinator') {
+          navigate('/coordinator');
         } else {
           navigate('/student');
         }
@@ -294,6 +306,15 @@ export const Register: React.FC = () => {
               value={formData.department}
               onChange={handleChange}
               options={DEPARTMENTS}
+              required
+            />
+
+            <Select
+              label="I am registering as"
+              name="role"
+              value={formData.role}
+              onChange={handleChange}
+              options={ROLES}
               required
             />
 
