@@ -1,16 +1,14 @@
-// Student Dashboard Page - Enhanced with Waitlist, Compliance, Branch-specific features, and Block handling
+// Student Dashboard Page - Waitlist, Branch-specific features, and Block handling
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { 
   subscribeToEvents, 
   registerForEvent, 
   getUserRegistrations,
   cancelRegistration,
-  getStudentCompliance,
   subscribeToWaitlist,
   getUserDocument
 } from '@/lib/firebase';
@@ -33,13 +31,6 @@ interface EventData {
   registration_fee?: number;
 }
 
-interface ComplianceData {
-  mandatory: { event: DocumentData; completed: boolean }[];
-  compliancePercent: number;
-  isCompliant: boolean;
-}
-
-// ─── Hide past / starting-soon events ────────────────────────
 const isEventHidden = (event: EventData): boolean => {
   if (!event.date) return false;
   const now = new Date();
@@ -65,8 +56,7 @@ export const StudentDashboard: React.FC = () => {
   const [loadingEvent, setLoadingEvent] = useState<string | null>(null);
   const [cancellingEvent, setCancellingEvent] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info' | 'blocked'; text: string } | null>(null);
-  const [compliance, setCompliance] = useState<ComplianceData | null>(null);
-  const [activeTab, setActiveTab] = useState<'workshops' | 'my-registrations' | 'compliance'>('workshops');
+  const [activeTab, setActiveTab] = useState<'events' | 'bookings'>('events');
   const [isBlocked, setIsBlocked] = useState(false);
 
   useEffect(() => {
@@ -77,7 +67,6 @@ export const StudentDashboard: React.FC = () => {
     }
   }, [user, userData, authLoading, navigate]);
 
-  // Subscribe to the student's own user document to detect live block changes
   useEffect(() => {
     if (!user) return;
     const checkBlocked = async () => {
@@ -87,7 +76,6 @@ export const StudentDashboard: React.FC = () => {
     checkBlocked();
   }, [user]);
 
-  // Subscribe to events
   useEffect(() => {
     const unsubscribe = subscribeToEvents((eventsData: DocumentData[]) => {
       const filteredEvents = (eventsData as EventData[]).filter(event => {
@@ -101,7 +89,6 @@ export const StudentDashboard: React.FC = () => {
     return () => unsubscribe();
   }, [userData?.department]);
 
-  // Fetch registrations
   useEffect(() => {
     const fetchRegistrations = async () => {
       if (user) {
@@ -116,7 +103,6 @@ export const StudentDashboard: React.FC = () => {
     fetchRegistrations();
   }, [user]);
 
-  // Subscribe to waitlist
   useEffect(() => {
     if (!user) return;
     const unsubscribe = subscribeToWaitlist((waitlistData: DocumentData[]) => {
@@ -129,35 +115,14 @@ export const StudentDashboard: React.FC = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Fetch compliance
-  useEffect(() => {
-    const fetchCompliance = async () => {
-      if (user && userData) {
-        try {
-          const status = await getStudentCompliance(user.uid, userData.department);
-          setCompliance(status);
-        } catch (error) {
-          console.error('Error fetching compliance:', error);
-        }
-      }
-    };
-    fetchCompliance();
-  }, [user, userData, registeredEvents]);
-
   const handleRegister = async (eventId: string) => {
     if (!user || !userData) return;
-
-    // Re-fetch block status just before registering (live check)
     const freshDoc = await getUserDocument(user.uid) as DocumentData | null;
     if (freshDoc?.is_blocked) {
       setIsBlocked(true);
-      setMessage({
-        type: 'blocked',
-        text: 'Your account has been blocked by the admin. You cannot register for workshops at this time. Please contact your administrator for assistance.'
-      });
+      setMessage({ type: 'blocked', text: 'Your account has been blocked by the admin. You cannot register for events at this time.' });
       return;
     }
-
     setLoadingEvent(eventId);
     setMessage(null);
     try {
@@ -165,6 +130,10 @@ export const StudentDashboard: React.FC = () => {
       if (result.status === 'registered') {
         setRegisteredEvents(prev => new Set([...prev, eventId]));
         setMessage({ type: 'success', text: result.message });
+        if (result.registrationId) {
+          navigate(`/ticket/${result.registrationId}`);
+          return;
+        }
       } else if (result.status === 'waitlisted') {
         setMessage({ type: 'info', text: result.message });
       }
@@ -172,12 +141,8 @@ export const StudentDashboard: React.FC = () => {
       setRegisteredEvents(new Set(regs.map((r: DocumentData) => r.event_id as string)));
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Registration failed';
-      // Check if the error is a block error from firebase
       const isBlockError = errorMessage.toLowerCase().includes('blocked');
-      setMessage({
-        type: isBlockError ? 'blocked' : 'error',
-        text: errorMessage
-      });
+      setMessage({ type: isBlockError ? 'blocked' : 'error', text: errorMessage });
       if (isBlockError) setIsBlocked(true);
     } finally {
       setLoadingEvent(null);
@@ -206,7 +171,7 @@ export const StudentDashboard: React.FC = () => {
   };
 
   const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   const formatTime = (time?: string) => {
     if (!time) return '';
@@ -219,8 +184,8 @@ export const StudentDashboard: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
-        <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin"></div>
+      <div className="min-h-screen bg-[#EAF3FF] flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+        <div className="w-8 h-8 rounded-full border-2 border-[#1D1D1F] border-t-transparent animate-spin"></div>
       </div>
     );
   }
@@ -228,167 +193,84 @@ export const StudentDashboard: React.FC = () => {
   const upcomingEvents       = events.filter(e => e.status === 'Upcoming');
   const registeredEventsList = events.filter(e => registeredEvents.has(e.id));
   const waitlistedEventsList = events.filter(e => waitlistedEvents.has(e.id));
+  const allMyEvents = [...registeredEventsList, ...waitlistedEventsList];
 
   return (
-    <div className="min-h-screen bg-[#E0E5EC]">
+    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 py-12">
-        {/* Welcome */}
-        <div className="mb-12">
-          <h1 className="font-display font-extrabold text-4xl md:text-5xl text-[#3D4852] tracking-tight">
+      <main className="max-w-[1100px] mx-auto px-4 sm:px-6 pt-8 sm:pt-10 relative z-10">
+        
+        {/* Welcome Header */}
+        <div className="mb-8">
+          <h1 className="font-extrabold text-[28px] sm:text-[32px] text-[#1D1D1F] tracking-tight">
             Welcome, {userData?.name}! 👋
           </h1>
-          <p className="mt-3 text-[#6B7280] text-lg">
-            Browse and register for upcoming workshops
+          <p className="mt-1 text-[#5E6C84] text-[14px] sm:text-[15px] font-medium">
+            Browse and register for upcoming events
           </p>
         </div>
 
-        {/* ── Blocked banner — shown prominently at the top if blocked ── */}
+        {/* Blocked banner */}
         {isBlocked && (
-          <div className="mb-8 p-5 rounded-2xl bg-red-50 border border-red-200 shadow-[inset_3px_3px_6px_rgba(0,0,0,0.04),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]">
+          <div className="mb-6 p-5 rounded-[24px] bg-red-50/90 backdrop-blur-md border border-red-100 shadow-sm">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
                 <svg className="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <div>
                 <p className="font-bold text-red-700 mb-1">Account Blocked</p>
-                <p className="text-sm text-red-600">
-                  Your account has been blocked by the administrator. You can browse workshops but cannot register for any.
-                  Please contact your administrator for assistance.
+                <p className="text-[14px] text-red-600 font-medium">
+                  Your account has been blocked by the administrator. You can browse events but cannot register for any.
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          <Card hover={false} className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-[#6B7280]">Available Workshops</p>
-              <p className="text-2xl font-bold text-[#3D4852]">{upcomingEvents.length}</p>
-            </div>
-          </Card>
-          <Card hover={false} className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#38B2AC] to-[#4FD1C5] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-[#6B7280]">Enrolled</p>
-              <p className="text-2xl font-bold text-[#3D4852]">{registeredEvents.size}</p>
-            </div>
-          </Card>
-          <Card hover={false} className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#F6AD55] to-[#ED8936] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-[#6B7280]">Waitlisted</p>
-              <p className="text-2xl font-bold text-[#3D4852]">{waitlistedEvents.size}</p>
-            </div>
-          </Card>
-          <Card hover={false} className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] ${
-              compliance?.isCompliant ? 'bg-gradient-to-br from-[#38B2AC] to-[#4FD1C5]' : 'bg-gradient-to-br from-[#FC8181] to-[#F56565]'
-            }`}>
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm text-[#6B7280]">Compliance</p>
-              <p className="text-2xl font-bold text-[#3D4852]">{compliance?.compliancePercent || 0}%</p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Message */}
-        {message && (
-          <div className={`mb-8 p-4 rounded-2xl ${
-            message.type === 'success' ? 'bg-green-50 text-green-700'
-            : message.type === 'info'    ? 'bg-blue-50 text-blue-700'
-            : message.type === 'blocked' ? 'bg-red-50 text-red-700 border border-red-200'
-            : 'bg-red-50 text-red-600'
-          } shadow-[inset_3px_3px_6px_rgba(0,0,0,0.05),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]`}>
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-start gap-2">
-                {message.type === 'blocked' ? (
-                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                  </svg>
-                ) : message.type === 'success' ? (
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                ) : message.type === 'info' ? (
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                )}
-                <span className="text-sm">{message.text}</span>
-              </div>
-              <button onClick={() => setMessage(null)} className="text-current opacity-60 hover:opacity-100 flex-shrink-0">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+        {/* Global Messages */}
+        {message && message.type !== 'blocked' && (
+          <div className={`mb-6 p-4 rounded-[20px] font-semibold text-[14px] ${
+            message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+            : message.type === 'info'    ? 'bg-blue-50 text-blue-700 border border-blue-100'
+            : 'bg-red-50 text-red-600 border border-red-100'
+          }`}>
+            {message.text}
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-4 mb-8">
-          {(['workshops', 'my-registrations', 'compliance'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 rounded-2xl font-medium transition-all duration-300 flex items-center gap-2 ${
-                activeTab === tab
-                  ? 'text-white bg-gradient-to-r from-[#6C63FF] to-[#8B84FF] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]'
-                  : 'text-[#6B7280] bg-[#E0E5EC] shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-              }`}>
-              {tab === 'workshops' && 'Available Workshops'}
-              {tab === 'my-registrations' && `My Enrollments (${registeredEvents.size + waitlistedEvents.size})`}
-              {tab === 'compliance' && (
-                <>
-                  Compliance
-                  {!compliance?.isCompliant && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>}
-                </>
-              )}
-            </button>
-          ))}
+        {/* Floating Glassy Pill Tabs */}
+        <div className="flex justify-start mb-8 overflow-x-auto pb-2">
+          <div className="flex p-1.5 bg-white/70 backdrop-blur-2xl rounded-full shadow-[0_8px_30px_rgba(0,100,200,0.06)] border border-white/90 shrink-0">
+            {(['events', 'bookings'] as const).map(tab => (
+              <button 
+                key={tab} 
+                onClick={() => setActiveTab(tab)}
+                className={`px-6 py-2.5 rounded-full text-[14px] font-bold transition-all duration-300 ${
+                  activeTab === tab
+                    ? 'bg-[#1D1D1F] text-white shadow-md'
+                    : 'text-[#5E6C84] hover:text-[#1D1D1F]'
+                }`}
+              >
+                {tab === 'events' ? 'Available Events' : `Bookings (${allMyEvents.length})`}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* ── Available Workshops ── */}
-        {activeTab === 'workshops' && (
+        {/* ── Available Events (World-Class Apple Glassy Event Cards) ── */}
+        {activeTab === 'events' && (
           <div>
-            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">
-              Available Workshops for {userData?.department}
+            <h2 className="font-extrabold text-[20px] text-[#1D1D1F] mb-6 tracking-tight">
+              Available Events for {userData?.department}
             </h2>
+            
             {upcomingEvents.length === 0 ? (
-              <Card hover={false} className="text-center py-16">
-                <div className="w-20 h-20 mx-auto rounded-full bg-[#E0E5EC] flex items-center justify-center shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] mb-6">
-                  <svg className="w-10 h-10 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-medium text-[#3D4852] mb-2">No workshops available</h3>
-                <p className="text-[#6B7280]">Check back later for new workshops</p>
-              </Card>
+              <div className="bg-white/70 backdrop-blur-2xl rounded-[32px] p-16 text-center border border-white/90 shadow-[0_8px_30px_rgba(0,100,200,0.06)]">
+                <p className="text-[#5E6C84] font-semibold text-[15px]">No events currently available.</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {upcomingEvents.map((event) => {
@@ -398,115 +280,129 @@ export const StudentDashboard: React.FC = () => {
                   const isFull          = event.available_seats <= 0;
 
                   return (
-                    <Card key={event.id} className="flex flex-col">
-                      {event.images?.[0] && (
-                        <img
-                          src={event.images[0]}
-                          alt={event.title}
-                          className="w-full h-36 object-cover rounded-2xl mb-4"
-                        />
-                      )}
-
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <span className="px-4 py-1.5 rounded-full text-sm font-medium bg-[#6C63FF]/10 text-[#6C63FF]">Workshop</span>
+                    <div key={event.id} className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-4 shadow-[0_12px_40px_rgba(0,100,200,0.08)] hover:shadow-[0_18px_50px_rgba(0,100,200,0.12)] transition-all border border-white flex flex-col group">
+                      
+                      {/* Top Image Section */}
+                      {event.images?.[0] ? (
+                        <div className="w-full h-[160px] rounded-[24px] overflow-hidden relative mb-4 bg-gray-100">
+                          <img 
+                            src={event.images[0]} 
+                            alt={event.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                          />
                           {event.is_mandatory && (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">Mandatory</span>
+                            <span className="absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold bg-red-500 text-white shadow-sm">
+                              Mandatory
+                            </span>
                           )}
                         </div>
-                        <span className={`text-sm font-medium ${isFull ? 'text-red-500' : 'text-[#38B2AC]'}`}>
-                          {isFull ? 'Full' : `${event.available_seats} seats`}
-                        </span>
-                      </div>
-
-                      <Link to={`/event/${event.id}`} className="hover:underline">
-                        <h3 className="font-display font-bold text-xl text-[#3D4852] mb-3">{event.title}</h3>
-                      </Link>
-
-                      <div className="flex items-center gap-2 text-[#6B7280] mb-2">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        <span className="text-sm">{formatDate(event.date)}</span>
-                      </div>
-
-                      {(event.start_time || event.end_time) && (
-                        <div className="flex items-center gap-2 text-[#6B7280] mb-4">
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span className="text-sm">{formatTime(event.start_time)} - {formatTime(event.end_time)}</span>
+                      ) : (
+                        <div className="w-full h-[160px] bg-white/50 rounded-[24px] flex items-center justify-center text-[#5E6C84] font-bold text-[13px] mb-4 border border-white">
+                          No Image Available
                         </div>
                       )}
 
-                      <div className="mb-6">
-                        <div className="flex justify-between text-sm text-[#6B7280] mb-2">
-                          <span>Enrollment</span>
-                          <span>{event.total_seats - event.available_seats} / {event.total_seats}</span>
-                        </div>
-                        <div className="h-3 rounded-full bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] overflow-hidden">
-                          <div className={`h-full rounded-full transition-all duration-500 ${isFull ? 'bg-gradient-to-r from-red-500 to-red-400' : 'bg-gradient-to-r from-[#6C63FF] to-[#8B84FF]'}`}
-                            style={{ width: `${((event.total_seats - event.available_seats) / event.total_seats) * 100}%` }} />
-                        </div>
-                      </div>
+                      <div className="px-1 flex flex-col gap-3 flex-1">
+                        
+                        {/* Title & Arrow Button Row */}
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#6C63FF]/10 text-[#6C63FF] mb-1.5">
+                              {event.type}
+                            </span>
+                            <Link to={`/event/${event.id}`}>
+                              <h3 className="font-bold text-[18px] text-[#1D1D1F] leading-tight tracking-tight hover:underline line-clamp-1">
+                                {event.title}
+                              </h3>
+                            </Link>
+                          </div>
 
-                      <div className="mt-auto space-y-2">
-                        <Link to={`/event/${event.id}`}>
-                          <Button variant="secondary" size="sm" className="w-full">
-                            View Details
-                          </Button>
-                        </Link>
+                          {/* Glassy Arrow Button */}
+                          <Link to={`/event/${event.id}`} className="w-10 h-10 bg-[#1D1D1F]/90 backdrop-blur-md rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform hover:scale-105 active:scale-95">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                              <line x1="7" y1="17" x2="17" y2="7"></line>
+                              <polyline points="7 7 17 7 17 17"></polyline>
+                            </svg>
+                          </Link>
+                        </div>
 
-                        {isRegistered ? (
-                          <div className="space-y-2">
-                            <Button variant="secondary" className="w-full" disabled>
-                              <span className="flex items-center justify-center gap-2">
-                                <svg className="w-5 h-5 text-[#38B2AC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
+                        {/* Location & Fee */}
+                        <div className="flex items-center justify-between text-[13px] text-[#5E6C84] font-medium">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-[14px] h-[14px] shrink-0">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                            </svg>
+                            <span className="truncate">{event.location?.address || 'SIMATS Campus'}</span>
+                          </div>
+                          <span className="font-extrabold text-[#1D1D1F] shrink-0">
+                            {event.registration_fee && event.registration_fee > 0 ? `₹${event.registration_fee}` : 'Free'}
+                          </span>
+                        </div>
+
+                        {/* Date & Seats Glassy Pill Bar */}
+                        <div className="flex items-center justify-between bg-white/60 backdrop-blur-md px-3.5 py-2.5 rounded-2xl mt-1 border border-white/50">
+                          <div className="flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-[14px] h-[14px] text-[#5E6C84]">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="text-[12px] font-bold text-[#1D1D1F]">
+                              {formatDate(event.date)}
+                            </span>
+                          </div>
+                          <span className={`text-[12px] font-bold ${isFull ? 'text-red-500' : 'text-[#38B2AC]'}`}>
+                            {isFull ? 'Full' : `${event.available_seats} seats left`}
+                          </span>
+                        </div>
+
+                        {/* Action Buttons with Premium Glassy Theme */}
+                        <div className="mt-3 pt-1">
+                          {isRegistered ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="w-full py-2.5 px-3 rounded-full bg-emerald-500/10 backdrop-blur-xl border border-emerald-500/20 text-emerald-700 font-bold text-[13px] flex items-center justify-center shadow-sm">
                                 Enrolled
-                              </span>
-                            </Button>
-                            <Button variant="danger" size="sm" className="w-full"
-                              onClick={() => handleCancel(event.id)} isLoading={cancellingEvent === event.id}>
-                              Cancel Enrollment
-                            </Button>
-                          </div>
-                        ) : isWaitlisted ? (
-                          <div className="space-y-2">
-                            <Button variant="secondary" className="w-full" disabled>
-                              <span className="flex items-center justify-center gap-2">
-                                <svg className="w-5 h-5 text-[#F6AD55]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
+                              </div>
+                              <button 
+                                onClick={() => handleCancel(event.id)} 
+                                disabled={cancellingEvent === event.id}
+                                className="w-full py-2.5 px-3 rounded-full bg-red-500/10 backdrop-blur-xl border border-red-500/20 text-red-600 hover:bg-red-500/20 font-bold text-[13px] transition-all shadow-sm active:scale-95 flex items-center justify-center"
+                              >
+                                {cancellingEvent === event.id ? 'Cancelling...' : 'Cancel'}
+                              </button>
+                            </div>
+                          ) : isWaitlisted ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="w-full py-2.5 px-3 rounded-full bg-amber-500/10 backdrop-blur-xl border border-amber-500/20 text-amber-700 font-bold text-[12px] flex items-center justify-center shadow-sm">
                                 Waitlist #{waitlistPosition}
-                              </span>
-                            </Button>
-                            <Button variant="danger" size="sm" className="w-full"
-                              onClick={() => handleCancel(event.id)} isLoading={cancellingEvent === event.id}>
-                              Leave Waitlist
-                            </Button>
-                          </div>
-                        ) : isBlocked ? (
-                          /* Blocked student sees a disabled button with explanation */
-                          <div className="relative group">
-                            <Button variant="secondary" className="w-full opacity-50 cursor-not-allowed" disabled>
-                              <span className="flex items-center justify-center gap-2">
-                                <svg className="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                                </svg>
-                                Registration Blocked
-                              </span>
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button variant="primary" className="w-full"
-                            onClick={() => handleRegister(event.id)} isLoading={loadingEvent === event.id}>
-                            {isFull ? 'Join Waitlist' : 'Enroll Now'}
-                          </Button>
-                        )}
+                              </div>
+                              <button 
+                                onClick={() => handleCancel(event.id)} 
+                                disabled={cancellingEvent === event.id}
+                                className="w-full py-2.5 px-3 rounded-full bg-red-500/10 backdrop-blur-xl border border-red-500/20 text-red-600 hover:bg-red-500/20 font-bold text-[13px] transition-all shadow-sm active:scale-95 flex items-center justify-center"
+                              >
+                                {cancellingEvent === event.id ? 'Leaving...' : 'Leave'}
+                              </button>
+                            </div>
+                          ) : isBlocked ? (
+                            <div className="w-full py-3 rounded-full bg-gray-200/50 backdrop-blur-xl border border-gray-300/30 text-gray-400 font-bold text-[13px] text-center shadow-none">
+                              Blocked
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleRegister(event.id)}
+                              disabled={loadingEvent === event.id}
+                              className="w-full py-3 px-4 rounded-full bg-white/80 hover:bg-white backdrop-blur-2xl border border-white/90 text-[#1D1D1F] font-extrabold text-[14px] transition-all shadow-[0_8px_20px_rgba(0,100,200,0.1)] hover:shadow-[0_10px_25px_rgba(0,100,200,0.18)] active:scale-95 flex items-center justify-center gap-2 group/btn"
+                            >
+                              <span>{loadingEvent === event.id ? 'Enrolling...' : 'Enroll Now'}</span>
+                              <svg className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+
                       </div>
-                    </Card>
+                    </div>
                   );
                 })}
               </div>
@@ -514,143 +410,122 @@ export const StudentDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* ── My Enrollments ── */}
-        {activeTab === 'my-registrations' && (
+        {/* ── Bookings Tab (Redesigned with the exact same premium Apple event card style) ── */}
+        {activeTab === 'bookings' && (
           <div>
-            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">My Enrollments</h2>
-            {registeredEventsList.length === 0 && waitlistedEventsList.length === 0 ? (
-              <Card hover={false} className="text-center py-16">
-                <div className="w-20 h-20 mx-auto rounded-full bg-[#E0E5EC] flex items-center justify-center shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] mb-6">
-                  <svg className="w-10 h-10 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-medium text-[#3D4852] mb-2">No enrollments yet</h3>
-                <p className="text-[#6B7280]">Browse available workshops and enroll!</p>
-              </Card>
+            <h2 className="font-extrabold text-[20px] text-[#1D1D1F] mb-6 tracking-tight">
+              My Bookings ({allMyEvents.length})
+            </h2>
+
+            {allMyEvents.length === 0 ? (
+              <div className="bg-white/70 backdrop-blur-2xl rounded-[32px] p-16 text-center border border-white/90 shadow-[0_8px_30px_rgba(0,100,200,0.06)]">
+                <p className="text-[#5E6C84] font-semibold text-[15px]">You have no active bookings yet.</p>
+              </div>
             ) : (
-              <div className="space-y-6">
-                {registeredEventsList.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-medium text-[#3D4852] mb-4 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-[#38B2AC]"></span>
-                      Confirmed ({registeredEventsList.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {registeredEventsList.map(event => (
-                        <Card key={event.id} className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-[#6C63FF]/10 text-[#6C63FF]">Workshop</span>
-                              {event.is_mandatory && <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-600">Mandatory</span>}
-                            </div>
-                            <h4 className="font-bold text-[#3D4852]">{event.title}</h4>
-                            <p className="text-sm text-[#6B7280]">{formatDate(event.date)}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {allMyEvents.map((event) => {
+                  const isWaitlisted = waitlistedEvents.has(event.id);
+                  const position = waitlistedEvents.get(event.id);
+
+                  return (
+                    <div key={event.id} className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-4 shadow-[0_12px_40px_rgba(0,100,200,0.08)] hover:shadow-[0_18px_50px_rgba(0,100,200,0.12)] transition-all border border-white flex flex-col group">
+                      
+                      {/* Top Image Section */}
+                      {event.images?.[0] ? (
+                        <div className="w-full h-[160px] rounded-[24px] overflow-hidden relative mb-4 bg-gray-100">
+                          <img 
+                            src={event.images[0]} 
+                            alt={event.title} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                          />
+                          <span className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-extrabold text-white shadow-sm ${isWaitlisted ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                            {isWaitlisted ? `Waitlist #${position}` : 'Confirmed'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="w-full h-[160px] bg-white/50 rounded-[24px] flex items-center justify-center text-[#5E6C84] font-bold text-[13px] mb-4 border border-white">
+                          No Image Available
+                        </div>
+                      )}
+
+                      <div className="px-1 flex flex-col gap-3 flex-1">
+                        
+                        {/* Title & Arrow Button Row */}
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 min-w-0">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#6C63FF]/10 text-[#6C63FF] mb-1.5">
+                              {event.type}
+                            </span>
+                            <Link to={`/event/${event.id}`}>
+                              <h3 className="font-bold text-[18px] text-[#1D1D1F] leading-tight tracking-tight hover:underline line-clamp-1">
+                                {event.title}
+                              </h3>
+                            </Link>
                           </div>
-                          <Button variant="danger" size="sm" onClick={() => handleCancel(event.id)} isLoading={cancellingEvent === event.id}>
-                            Cancel
-                          </Button>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {waitlistedEventsList.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-medium text-[#3D4852] mb-4 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-[#F6AD55]"></span>
-                      Waitlisted ({waitlistedEventsList.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {waitlistedEventsList.map(event => (
-                        <Card key={event.id} className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-[#6C63FF]/10 text-[#6C63FF]">Workshop</span>
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-600">
-                                Position #{waitlistedEvents.get(event.id)}
-                              </span>
-                            </div>
-                            <h4 className="font-bold text-[#3D4852]">{event.title}</h4>
-                            <p className="text-sm text-[#6B7280]">{formatDate(event.date)}</p>
+
+                          {/* Glassy Arrow Button */}
+                          <Link to={`/event/${event.id}`} className="w-10 h-10 bg-[#1D1D1F]/90 backdrop-blur-md rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform hover:scale-105 active:scale-95">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+                              <line x1="7" y1="17" x2="17" y2="7"></line>
+                              <polyline points="7 7 17 7 17 17"></polyline>
+                            </svg>
+                          </Link>
+                        </div>
+
+                        {/* Location & Fee */}
+                        <div className="flex items-center justify-between text-[13px] text-[#5E6C84] font-medium">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-[14px] h-[14px] shrink-0">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                            </svg>
+                            <span className="truncate">{event.location?.address || 'SIMATS Campus'}</span>
                           </div>
-                          <Button variant="danger" size="sm" onClick={() => handleCancel(event.id)} isLoading={cancellingEvent === event.id}>
-                            Leave
-                          </Button>
-                        </Card>
-                      ))}
+                          <span className="font-extrabold text-[#1D1D1F] shrink-0">
+                            {event.registration_fee && event.registration_fee > 0 ? `₹${event.registration_fee}` : 'Free'}
+                          </span>
+                        </div>
+
+                        {/* Date & Time Glassy Pill Bar */}
+                        <div className="flex items-center justify-between bg-white/60 backdrop-blur-md px-3.5 py-2.5 rounded-2xl mt-1 border border-white/50">
+                          <div className="flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-[14px] h-[14px] text-[#5E6C84]">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="text-[12px] font-bold text-[#1D1D1F]">
+                              {formatDate(event.date)}
+                            </span>
+                          </div>
+                          <span className="text-[12px] font-bold text-[#5E6C84]">
+                            {formatTime(event.start_time)}
+                          </span>
+                        </div>
+
+                        {/* Action Buttons with Premium Glassy Theme */}
+                        <div className="mt-3 pt-1 grid grid-cols-2 gap-2">
+                          <Link to={`/event/${event.id}`} className="w-full">
+                            <button className="w-full py-2.5 px-3 rounded-full bg-white/80 hover:bg-white backdrop-blur-2xl border border-white/90 text-[#1D1D1F] font-bold text-[13px] transition-all shadow-sm active:scale-95 flex items-center justify-center">
+                              View Ticket
+                            </button>
+                          </Link>
+                          <button
+                            onClick={() => handleCancel(event.id)}
+                            disabled={cancellingEvent === event.id}
+                            className="w-full py-2.5 px-3 rounded-full bg-red-500/10 backdrop-blur-xl border border-red-500/20 text-red-600 hover:bg-red-500/20 font-bold text-[13px] transition-all shadow-sm active:scale-95 flex items-center justify-center"
+                          >
+                            {cancellingEvent === event.id ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        </div>
+
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
 
-        {/* ── Compliance ── */}
-        {activeTab === 'compliance' && (
-          <div>
-            <h2 className="font-display font-bold text-2xl text-[#3D4852] mb-6">Academic Compliance Status</h2>
-            <Card hover={false} className="mb-8">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                <div className="flex items-center gap-6">
-                  <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
-                    compliance?.isCompliant ? 'bg-gradient-to-br from-[#38B2AC] to-[#4FD1C5]' : 'bg-gradient-to-br from-[#FC8181] to-[#F56565]'
-                  } shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]`}>
-                    <span className="text-3xl font-bold text-white">{compliance?.compliancePercent || 0}%</span>
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-[#3D4852]">{compliance?.isCompliant ? 'Compliant' : 'Pending Compliance'}</h3>
-                    <p className="text-[#6B7280]">
-                      {compliance?.mandatory?.filter(m => m.completed).length || 0} of {compliance?.mandatory?.length || 0} mandatory workshops completed
-                    </p>
-                  </div>
-                </div>
-                {!compliance?.isCompliant && (
-                  <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
-                    <p className="text-sm text-red-700">
-                      <strong>Action Required:</strong> Complete all mandatory workshops to achieve compliance.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            <h3 className="text-lg font-medium text-[#3D4852] mb-4">Mandatory Workshops for {userData?.department}</h3>
-            {!compliance?.mandatory || compliance.mandatory.length === 0 ? (
-              <Card hover={false} className="text-center py-12">
-                <p className="text-[#6B7280]">No mandatory workshops assigned to your department</p>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {compliance.mandatory.map(({ event, completed }) => (
-                  <Card key={event.id} hover={false} className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${completed ? 'bg-[#38B2AC]/10' : 'bg-[#FC8181]/10'}`}>
-                        {completed ? (
-                          <svg className="w-5 h-5 text-[#38B2AC]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5 text-[#FC8181]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-[#3D4852]">{event.title}</h4>
-                        <p className="text-sm text-[#6B7280]">{formatDate(event.date)}</p>
-                      </div>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${completed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {completed ? 'Completed' : 'Pending'}
-                    </span>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </main>
     </div>
   );

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -177,13 +176,14 @@ export const AdminEvents: React.FC = () => {
     setMessage(null);
     setLoading(true);
     try {
+      const seats = parseInt(formData.total_seats, 10);
       await createEvent({
         title: formData.title,
         type: formData.type as 'Workshop' | 'Seminar',
         date: formData.date,
         start_time: formData.start_time,
         end_time: formData.end_time,
-        total_seats: parseInt(formData.total_seats),
+        total_seats: Number.isNaN(seats) ? null : seats,
         is_mandatory: formData.is_mandatory,
         target_branches: formData.target_branches
       });
@@ -545,7 +545,7 @@ export const AdminEvents: React.FC = () => {
                   <div className="w-11 h-6 bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C63FF]"></div>
                 </label>
                 <span className="text-[#3D4852] font-medium">Mark as Mandatory</span>
-                <span className="text-sm text-[#6B7280]">(Students must complete this for compliance)</span>
+                <span className="text-sm text-[#6B7280]">(Shown with a "Mandatory" badge to students)</span>
               </div>
 
               {/* Target Branches */}

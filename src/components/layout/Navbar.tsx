@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { Button } from '@/components/ui/Button';
 
 export const Navbar: React.FC = () => {
   const { user, userData, logout } = useAuth();
@@ -20,53 +19,65 @@ export const Navbar: React.FC = () => {
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <nav className="sticky top-0 z-50 px-6 py-4 bg-[#E0E5EC]/90 backdrop-blur-md shadow-[0_4px_16px_rgb(163,177,198,0.4)]">
+    <nav className="sticky top-0 z-50 px-4 sm:px-6 py-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
+        {/* Completely rounded pill-shaped outer wrapper with Apple glassmorphism style */}
+        <div className="bg-white/70 backdrop-blur-2xl border border-white/80 shadow-[0_8px_32px_rgba(0,100,200,0.06)] rounded-full px-5 py-2.5 flex items-center justify-between">
+          
+          {/* Logo with Custom Image Icon from /public/seatsync.png & Removed "SIMATS" */}
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="w-10 h-10 rounded-full bg-[#1D1D1F] flex items-center justify-center shadow-md overflow-hidden transition-transform group-active:scale-95 p-1.5">
+              <img 
+                src="/seatsync.png" 
+                alt="SeatSync Logo" 
+                className="w-full h-full object-contain" 
+              />
             </div>
-            <span className="font-display font-bold text-xl text-[#3D4852]">SIMATS SeatSync</span>
+            <span className="font-bold text-[17px] text-[#1D1D1F] tracking-tight">Seat<span className="text-[#86868B]">Sync</span></span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-6">
+          {/* Desktop Navigation - Glassy Pill Bar */}
+          <div className="hidden md:flex items-center gap-1 bg-white/50 backdrop-blur-md p-1 rounded-full border border-white/60 shadow-inner">
             {user && userData && (
               <>
                 {userData.role === 'student' && (
-                  <Link
-                    to="/student"
-                    className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
-                      isActive('/student')
-                        ? 'text-[#6C63FF] bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-                        : 'text-[#6B7280] hover:text-[#3D4852]'
-                    }`}
-                  >
-                    Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      to="/student"
+                      className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 ${
+                        isActive('/student')
+                          ? 'bg-[#1D1D1F] text-white shadow-sm'
+                          : 'text-[#5E6C84] hover:text-[#1D1D1F]'
+                      }`}
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      to="/student"
+                      className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 text-[#5E6C84] hover:text-[#1D1D1F]`}
+                    >
+                      Tickets
+                    </Link>
+                  </>
                 )}
                 {userData.role === 'admin' && (
                   <>
                     <Link
                       to="/admin"
-                      className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                      className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 ${
                         isActive('/admin')
-                          ? 'text-[#6C63FF] bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-                          : 'text-[#6B7280] hover:text-[#3D4852]'
+                          ? 'bg-[#1D1D1F] text-white shadow-sm'
+                          : 'text-[#5E6C84] hover:text-[#1D1D1F]'
                       }`}
                     >
                       Dashboard
                     </Link>
                     <Link
                       to="/admin/events"
-                      className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                      className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 ${
                         isActive('/admin/events')
-                          ? 'text-[#6C63FF] bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-                          : 'text-[#6B7280] hover:text-[#3D4852]'
+                          ? 'bg-[#1D1D1F] text-white shadow-sm'
+                          : 'text-[#5E6C84] hover:text-[#1D1D1F]'
                       }`}
                     >
                       Workshops
@@ -76,10 +87,10 @@ export const Navbar: React.FC = () => {
                 {userData.role === 'coordinator' && (
                   <Link
                     to="/coordinator"
-                    className={`px-4 py-2 rounded-xl font-medium transition-all duration-300 ${
+                    className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 ${
                       isActive('/coordinator')
-                        ? 'text-[#6C63FF] bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
-                        : 'text-[#6B7280] hover:text-[#3D4852]'
+                        ? 'bg-[#1D1D1F] text-white shadow-sm'
+                        : 'text-[#5E6C84] hover:text-[#1D1D1F]'
                     }`}
                   >
                     My Events
@@ -89,90 +100,99 @@ export const Navbar: React.FC = () => {
             )}
           </div>
 
-          {/* User Section */}
-          <div className="hidden md:flex items-center gap-4">
+          {/* User Section / Auth / Logout */}
+          <div className="hidden md:flex items-center gap-2">
             {user && userData ? (
-              <>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center text-white font-bold shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)]">
+              <div className="flex items-center gap-2 bg-white/60 backdrop-blur-xl p-1 pl-4 rounded-full border border-white/80 shadow-sm">
+                <div className="flex items-center gap-2 mr-1">
+                  <div className="w-7 h-7 rounded-full bg-[#1D1D1F] flex items-center justify-center text-white text-xs font-bold shadow-sm">
                     {userData.name.charAt(0).toUpperCase()}
                   </div>
-                  <div className="text-sm">
-                    <p className="font-medium text-[#3D4852]">{userData.name}</p>
-                    <p className="text-[#6B7280] capitalize">{userData.role}</p>
-                  </div>
+                  <span className="text-[13px] font-bold text-[#1D1D1F]">{userData.name}</span>
                 </div>
-                <Button variant="secondary" size="sm" onClick={handleLogout}>
-                  Logout
-                </Button>
-              </>
+
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={handleLogout} 
+                    className="px-4 py-2 rounded-full bg-[#1D1D1F] text-white text-[13px] font-bold hover:bg-black transition-colors shadow-sm"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
             ) : (
-              <>
+              <div className="flex items-center gap-2">
                 <Link to="/login">
-                  <Button variant="secondary" size="sm">Login</Button>
+                  <button className="px-5 py-2 rounded-full text-[14px] font-semibold text-[#1D1D1F] hover:bg-white/60 transition-colors">
+                    Login
+                  </button>
                 </Link>
                 <Link to="/register">
-                  <Button variant="primary" size="sm">Register</Button>
+                  <button className="px-5 py-2 rounded-full text-[14px] font-semibold bg-[#1D1D1F] text-white hover:bg-black transition-all shadow-sm">
+                    Register
+                  </button>
                 </Link>
-              </>
+              </div>
             )}
           </div>
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden w-12 h-12 rounded-2xl bg-[#E0E5EC] flex items-center justify-center shadow-[5px_5px_10px_rgb(163,177,198,0.6),-5px_-5px_10px_rgba(255,255,255,0.5)] focus:outline-none focus:ring-2 focus:ring-[#6C63FF] focus:ring-offset-2 focus:ring-offset-[#E0E5EC]"
+            className="md:hidden w-10 h-10 rounded-full bg-white/70 backdrop-blur-md flex items-center justify-center text-[#1D1D1F] focus:outline-none border border-white/80 shadow-sm"
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           >
             {isMobileMenuOpen ? (
-              <svg className="w-6 h-6 text-[#3D4852]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             ) : (
-              <svg className="w-6 h-6 text-[#3D4852]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             )}
           </button>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu Dropdown */}
         {isMobileMenuOpen && (
-          <div className="md:hidden mt-4 p-6 rounded-[24px] bg-[#E0E5EC] shadow-[9px_9px_16px_rgb(163,177,198,0.6),-9px_-9px_16px_rgba(255,255,255,0.5)]">
-            <div className="flex flex-col gap-4">
+          <div className="md:hidden mt-3 p-5 rounded-[32px] bg-white/80 backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,100,200,0.12)] border border-white">
+            <div className="flex flex-col gap-3">
               {user && userData ? (
                 <>
-                  <div className="flex items-center gap-3 pb-4 border-b border-[#A3B1C6]/30">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center text-white font-bold">
+                  <div className="flex items-center gap-3 pb-3 border-b border-gray-100/80">
+                    <div className="w-10 h-10 rounded-full bg-[#1D1D1F] flex items-center justify-center text-white font-bold text-sm shadow-sm">
                       {userData.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-medium text-[#3D4852]">{userData.name}</p>
-                      <p className="text-sm text-[#6B7280] capitalize">{userData.role}</p>
+                      <p className="font-bold text-[15px] text-[#1D1D1F]">{userData.name}</p>
+                      <p className="text-xs text-[#5E6C84] capitalize font-medium">{userData.role}</p>
                     </div>
                   </div>
                   
                   {userData.role === 'student' && (
-                    <Link
-                      to="/student"
-                      className="px-4 py-3 rounded-xl font-medium text-[#3D4852] hover:bg-[#E0E5EC] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] transition-all"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      Dashboard
-                    </Link>
+                    <>
+                      <Link
+                        to="/student"
+                        className="px-4 py-3 rounded-2xl font-semibold text-[15px] text-[#1D1D1F] bg-white/60 border border-white shadow-sm"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        Dashboard & Tickets
+                      </Link>
+                    </>
                   )}
                   
                   {userData.role === 'admin' && (
                     <>
                       <Link
                         to="/admin"
-                        className="px-4 py-3 rounded-xl font-medium text-[#3D4852] hover:bg-[#E0E5EC] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] transition-all"
+                        className="px-4 py-3 rounded-2xl font-semibold text-[15px] text-[#1D1D1F] bg-white/60 border border-white shadow-sm"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         Dashboard
                       </Link>
                       <Link
                         to="/admin/events"
-                        className="px-4 py-3 rounded-xl font-medium text-[#3D4852] hover:bg-[#E0E5EC] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] transition-all"
+                        className="px-4 py-3 rounded-2xl font-semibold text-[15px] text-[#1D1D1F] bg-white/60 border border-white shadow-sm"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
                         Workshops
@@ -183,26 +203,26 @@ export const Navbar: React.FC = () => {
                   {userData.role === 'coordinator' && (
                     <Link
                       to="/coordinator"
-                      className="px-4 py-3 rounded-xl font-medium text-[#3D4852] hover:bg-[#E0E5EC] hover:shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] transition-all"
+                      className="px-4 py-3 rounded-2xl font-semibold text-[15px] text-[#1D1D1F] bg-white/60 border border-white shadow-sm"
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       My Events
                     </Link>
                   )}
                   
-                  <Button variant="secondary" onClick={handleLogout} className="mt-2">
+                  <button onClick={handleLogout} className="w-full py-3.5 rounded-full font-semibold text-[15px] text-white bg-[#1D1D1F] text-center mt-1 shadow-md">
                     Logout
-                  </Button>
+                  </button>
                 </>
               ) : (
-                <>
+                <div className="flex flex-col gap-2">
                   <Link to="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button variant="secondary" className="w-full">Login</Button>
+                    <button className="w-full py-3.5 rounded-full font-semibold text-[15px] text-[#1D1D1F] bg-white/70 border border-white shadow-sm">Login</button>
                   </Link>
                   <Link to="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                    <Button variant="primary" className="w-full">Register</Button>
+                    <button className="w-full py-3.5 rounded-full font-semibold text-[15px] text-white bg-[#1D1D1F] shadow-md">Register</button>
                   </Link>
-                </>
+                </div>
               )}
             </div>
           </div>

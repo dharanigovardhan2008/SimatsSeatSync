@@ -1,513 +1,353 @@
-import React, { useState } from 'react';
-import { Event, EventRegistration } from '@/types/event.types';
-import { Modal } from '@/components/ui/Modal';
-import { Badge } from '@/components/ui/Badge';
-import { formatDate, formatTime } from '@/utils/eventUtils';
+// Event Detail Page - Apple Glassmorphism & Minimalist Design
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Navbar } from '@/components/layout/Navbar';
 import { useAuth } from '@/context/AuthContext';
-import { registerForEvent } from '@/lib/firebase';
-import toast from 'react-hot-toast';
+import { getEventDocument, registerForEvent, getUserRegistrations, cancelRegistration, subscribeToWaitlist, getUserDocument } from '@/lib/firebase';
+import type { DocumentData } from 'firebase/firestore';
 
-interface EventDetailModalProps {
-  event: Event;
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-export const EventDetailModal: React.FC<EventDetailModalProps> = ({ 
-  event, 
-  isOpen, 
-  onClose 
-}) => {
-  const { currentUser } = useAuth();
+export const EventDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user, userData, loading: authLoading } = useAuth();
+  
+  const [event, setEvent] = useState<DocumentData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [waitlistPosition, setWaitlistPosition] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'schedule' | 'speakers'>('overview');
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [teamData, setTeamData] = useState({
-    teamName: '',
-    members: ['']
-  });
+  const [loadingAction, setLoadingAction] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info' | 'blocked'; text: string } | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  
+  // Hackathon team state
+  const [teamData, setTeamData] = useState({ teamName: '', members: [''] });
+
+  useEffect(() => {
+    if (!id) return;
+    const fetchEvent = async () => {
+      try {
+        const docData = await getEventDocument(id);
+        if (docData) {
+          setEvent(docData);
+        }
+      } catch (err) {
+        console.error('Error fetching event:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvent();
+  }, [id]);
+
+  useEffect(() => {
+    if (!user) return;
+    const checkUserStatus = async () => {
+      const doc = await getUserDocument(user.uid);
+      setIsBlocked(!!(doc as DocumentData)?.is_blocked);
+      
+      const regs = await getUserRegistrations(user.uid);
+      const found = regs.some((r: DocumentData) => r.event_id === id);
+      setIsRegistered(found);
+    };
+    checkUserStatus();
+  }, [user, id]);
+
+  useEffect(() => {
+    if (!user || !id) return;
+    const unsubscribe = subscribeToWaitlist((waitlistData: DocumentData[]) => {
+      const entry = waitlistData.find(w => w.user_id === user.uid && w.event_id === id);
+      if (entry) {
+        setWaitlistPosition(entry.position);
+      } else {
+        setWaitlistPosition(null);
+      }
+    });
+    return () => unsubscribe();
+  }, [user, id]);
 
   const handleRegister = async () => {
-    if (!currentUser) {
-      toast.error('Please login to register');
+    if (!user || !userData || !id) {
+      navigate('/login');
       return;
     }
-
-    setIsRegistering(true);
+    const freshDoc = await getUserDocument(user.uid) as DocumentData | null;
+    if (freshDoc?.is_blocked) {
+      setIsBlocked(true);
+      setMessage({ type: 'blocked', text: 'Your account has been blocked by the admin.' });
+      return;
+    }
+    setLoadingAction(true);
+    setMessage(null);
     try {
-      const registration: Partial<EventRegistration> = {
-        eventId: event.id,
-        userId: currentUser.uid,
-        userName: currentUser.displayName || '',
-        userEmail: currentUser.email || '',
-        registeredAt: new Date(),
-        attended: false,
-        certificateIssued: false
-      };
-
-      // Add team info for hackathons
-      if (event.type === 'hackathon') {
-        registration.teamName = teamData.teamName;
-        registration.teamMembers = teamData.members.filter(m => m.trim());
+      const result = await registerForEvent(user.uid, id, userData.department);
+      if (result.status === 'registered') {
+        setIsRegistered(true);
+        setMessage({ type: 'success', text: result.message });
+      } else if (result.status === 'waitlisted') {
+        setMessage({ type: 'info', text: result.message });
       }
-
-      await registerForEvent(registration);
-      toast.success('Successfully registered!');
-      onClose();
-    } catch (error) {
-      toast.error('Registration failed. Please try again.');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Registration failed';
+      setMessage({ type: 'error', text: errMsg });
     } finally {
-      setIsRegistering(false);
+      setLoadingAction(false);
     }
   };
 
+  const handleCancel = async () => {
+    if (!user || !id) return;
+    if (!confirm('Are you sure you want to cancel this registration?')) return;
+    setLoadingAction(true);
+    setMessage(null);
+    try {
+      await cancelRegistration(user.uid, id);
+      setIsRegistered(false);
+      setWaitlistPosition(null);
+      setMessage({ type: 'success', text: 'Registration cancelled successfully.' });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'Cancellation failed';
+      setMessage({ type: 'error', text: errMsg });
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  if (loading || authLoading) {
+    return (
+      <div className="min-h-screen bg-[#EAF3FF] flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+        <div className="w-8 h-8 rounded-full border-2 border-[#1D1D1F] border-t-transparent animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!event) {
+    return (
+      <div className="min-h-screen bg-[#EAF3FF] text-[#1D1D1F]" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+        <Navbar />
+        <div className="max-w-[800px] mx-auto px-4 py-20 text-center">
+          <h2 className="text-2xl font-extrabold mb-4">Event Not Found</h2>
+          <Link to="/" className="px-6 py-3 rounded-full bg-[#1D1D1F] text-white font-bold text-sm">
+            Back to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isFull = event.available_seats <= 0;
+  const mainImage = event.images?.[0];
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="large">
-      <div className="max-h-[90vh] overflow-y-auto">
-        {/* Header Image */}
-        {event.image && (
-          <div className="relative h-64 w-full">
-            <img
-              src={event.image}
-              alt={event.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            <div className="absolute bottom-6 left-6 right-6">
-              <div className="flex gap-2 mb-3">
-                <Badge className="bg-white/90 text-gray-800">
-                  {event.type.toUpperCase()}
-                </Badge>
-                <Badge className={getStatusBadgeColor(event.status)}>
-                  {event.status.toUpperCase()}
-                </Badge>
-              </div>
-              <h2 className="text-3xl font-bold text-white mb-2">
-                {event.title}
-              </h2>
-            </div>
+    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      <Navbar />
+
+      <main className="max-w-[1000px] mx-auto px-4 sm:px-6 pt-6 sm:pt-10 relative z-10">
+        
+        {/* Back Button & Tab Bar Header */}
+        <div className="flex items-center justify-between mb-6">
+          <button 
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 rounded-full bg-white/70 backdrop-blur-md border border-white/90 flex items-center justify-center text-[#1D1D1F] shadow-sm hover:bg-white transition-all"
+          >
+            ←
+          </button>
+          
+          <div className="flex p-1 bg-white/70 backdrop-blur-2xl rounded-full border border-white/90 shadow-sm">
+            {(['overview', 'schedule', 'speakers'] as const).map(tab => {
+              if (tab === 'schedule' && (!event.schedule || event.schedule.length === 0)) return null;
+              if (tab === 'speakers' && (!event.speakers || event.speakers.length === 0)) return null;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-5 py-2 rounded-full text-[13px] font-bold capitalize transition-all ${
+                    activeTab === tab ? 'bg-[#1D1D1F] text-white shadow-sm' : 'text-[#5E6C84] hover:text-[#1D1D1F]'
+                  }`}
+                >
+                  {tab}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Global Messages */}
+        {message && (
+          <div className={`mb-6 p-4 rounded-[20px] font-semibold text-[14px] ${
+            message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+            : message.type === 'info' ? 'bg-blue-50 text-blue-700 border border-blue-100'
+            : 'bg-red-50 text-red-600 border border-red-100'
+          }`}>
+            {message.text}
           </div>
         )}
 
-        {/* Content */}
-        <div className="p-6">
-          {/* Quick Info Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <InfoCard icon="📅" label="Date" value={formatDate(event.date)} />
-            <InfoCard icon="⏰" label="Time" value={`${event.startTime} - ${event.endTime}`} />
-            <InfoCard icon="📍" label="Venue" value={event.venue} />
-            <InfoCard 
-              icon="🪑" 
-              label="Seats" 
-              value={`${event.availableSeats} / ${event.totalSeats}`}
-              highlight={event.availableSeats < event.totalSeats * 0.2}
-            />
-          </div>
+        {/* Hero Banner Card */}
+        <div className="bg-white/80 backdrop-blur-2xl rounded-[36px] p-4 sm:p-6 shadow-[0_16px_50px_rgba(0,100,200,0.08)] border border-white mb-6">
+          {mainImage ? (
+            <div className="relative w-full h-[280px] sm:h-[380px] rounded-[28px] overflow-hidden mb-6 bg-gray-100 shadow-inner">
+              <img src={mainImage} alt={event.title} className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+              
+              <div className="absolute top-4 left-4 flex gap-2">
+                <span className="px-3.5 py-1 rounded-full text-[11px] font-extrabold bg-white/20 backdrop-blur-md text-white border border-white/30">
+                  {event.type?.toUpperCase() || 'EVENT'}
+                </span>
+                {event.is_mandatory && (
+                  <span className="px-3.5 py-1 rounded-full text-[11px] font-extrabold bg-red-500 text-white shadow-sm">
+                    Mandatory
+                  </span>
+                )}
+              </div>
 
-          {/* Tabs */}
-          <div className="border-b border-gray-200 mb-6">
-            <div className="flex gap-4">
-              <TabButton
-                active={activeTab === 'overview'}
-                onClick={() => setActiveTab('overview')}
-              >
-                Overview
-              </TabButton>
-              {event.schedule && event.schedule.length > 0 && (
-                <TabButton
-                  active={activeTab === 'schedule'}
-                  onClick={() => setActiveTab('schedule')}
-                >
-                  Schedule
-                </TabButton>
-              )}
-              {event.speakers && event.speakers.length > 0 && (
-                <TabButton
-                  active={activeTab === 'speakers'}
-                  onClick={() => setActiveTab('speakers')}
-                >
-                  Speakers
-                </TabButton>
-              )}
+              <div className="absolute bottom-6 left-6 right-6">
+                <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight drop-shadow-md">
+                  {event.title}
+                </h1>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6 p-8 text-center bg-gray-50 rounded-[28px] border border-gray-100">
+              <h1 className="text-2xl sm:text-4xl font-extrabold text-[#1D1D1F] mb-2">{event.title}</h1>
+            </div>
+          )}
+
+          {/* Quick Info Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
+            <div className="bg-white/70 backdrop-blur-md p-4 rounded-[24px] border border-white/90 shadow-sm">
+              <div className="text-xl mb-1">📅</div>
+              <div className="text-[11px] text-[#5E6C84] uppercase font-bold">Date</div>
+              <div className="text-[14px] font-extrabold text-[#1D1D1F]">{formatDate(event.date)}</div>
+            </div>
+            <div className="bg-white/70 backdrop-blur-md p-4 rounded-[24px] border border-white/90 shadow-sm">
+              <div className="text-xl mb-1">⏰</div>
+              <div className="text-[11px] text-[#5E6C84] uppercase font-bold">Time</div>
+              <div className="text-[14px] font-extrabold text-[#1D1D1F]">{event.start_time || '10:00 AM'}</div>
+            </div>
+            <div className="bg-white/70 backdrop-blur-md p-4 rounded-[24px] border border-white/90 shadow-sm">
+              <div className="text-xl mb-1">📍</div>
+              <div className="text-[11px] text-[#5E6C84] uppercase font-bold">Venue</div>
+              <div className="text-[14px] font-extrabold text-[#1D1D1F] truncate">{event.location?.address || 'Campus'}</div>
+            </div>
+            <div className="bg-white/70 backdrop-blur-md p-4 rounded-[24px] border border-white/90 shadow-sm">
+              <div className="text-xl mb-1">🪑</div>
+              <div className="text-[11px] text-[#5E6C84] uppercase font-bold">Seats Left</div>
+              <div className={`text-[14px] font-extrabold ${isFull ? 'text-red-500' : 'text-[#38B2AC]'}`}>
+                {isFull ? 'Full' : `${event.available_seats ?? 50} / ${event.total_seats ?? 100}`}
+              </div>
             </div>
           </div>
 
-          {/* Tab Content */}
-          <div className="mb-6">
+          {/* Tab Content Panels */}
+          <div className="pt-2">
             {activeTab === 'overview' && (
-              <OverviewTab event={event} />
+              <div className="space-y-4 text-[#1D1D1F]">
+                <h3 className="text-lg font-extrabold tracking-tight">About This Event</h3>
+                <p className="text-[#5E6C84] text-[15px] leading-relaxed font-medium whitespace-pre-line">
+                  {event.long_description || event.description || 'No description provided.'}
+                </p>
+              </div>
             )}
             {activeTab === 'schedule' && event.schedule && (
-              <ScheduleTab schedule={event.schedule} />
+              <div className="space-y-3">
+                <h3 className="text-lg font-extrabold tracking-tight mb-4">Event Schedule</h3>
+                {event.schedule.map((item: any, idx: number) => (
+                  <div key={idx} className="p-4 rounded-[20px] bg-white/60 backdrop-blur-md border border-white/80 flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-[#5E6C84] mb-0.5">{item.time}</div>
+                      <h4 className="font-extrabold text-[15px] text-[#1D1D1F]">{item.title}</h4>
+                      <p className="text-xs text-[#5E6C84] font-medium mt-1">{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
             {activeTab === 'speakers' && event.speakers && (
-              <SpeakersTab speakers={event.speakers} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {event.speakers.map((speaker: any, idx: number) => (
+                  <div key={idx} className="p-4 rounded-[24px] bg-white/60 backdrop-blur-md border border-white/80 flex gap-4 items-center">
+                    <div className="w-14 h-14 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center text-lg font-bold shrink-0">
+                      {speaker.name?.charAt(0) || 'S'}
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-[16px] text-[#1D1D1F]">{speaker.name}</h4>
+                      <p className="text-xs text-[#6C63FF] font-bold">{speaker.title}</p>
+                      <p className="text-xs text-[#5E6C84] font-medium mt-1 line-clamp-2">{speaker.bio}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
+        </div>
 
-          {/* Hackathon Team Form */}
-          {event.type === 'hackathon' && event.availableSeats > 0 && (
-            <HackathonTeamForm
-              teamData={teamData}
-              setTeamData={setTeamData}
-              teamSize={event.teamSize}
-            />
-          )}
+        {/* Bottom Sticky Action Bar */}
+        <div className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-5 shadow-[0_16px_50px_rgba(0,100,200,0.08)] border border-white flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <div className="text-[12px] font-bold text-[#5E6C84] uppercase tracking-wider">Registration Fee</div>
+            <div className="text-[22px] font-extrabold text-[#1D1D1F]">
+              {event.registration_fee && event.registration_fee > 0 ? `₹${event.registration_fee}` : 'Free'}
+            </div>
+          </div>
 
-          {/* Registration Button */}
-          <div className="flex gap-4">
-            {event.availableSeats > 0 ? (
-              <button
-                onClick={handleRegister}
-                disabled={isRegistering}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 
-                         text-white py-4 rounded-lg font-bold text-lg
-                         hover:from-blue-700 hover:to-purple-700 
-                         disabled:opacity-50 disabled:cursor-not-allowed
-                         transition-all duration-300 shadow-lg hover:shadow-xl"
-              >
-                {isRegistering ? 'Registering...' : 'Register Now'}
-              </button>
+          <div className="w-full sm:w-auto flex gap-3">
+            {isRegistered ? (
+              <div className="flex gap-3 w-full sm:w-auto">
+                <div className="flex-1 sm:flex-initial px-6 py-3.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 font-extrabold text-[14px] flex items-center justify-center">
+                  ✓ Enrolled
+                </div>
+                <button
+                  onClick={handleCancel}
+                  disabled={loadingAction}
+                  className="px-6 py-3.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-600 hover:bg-red-500/20 font-extrabold text-[14px] transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : waitlistPosition !== null ? (
+              <div className="flex gap-3 w-full sm:w-auto">
+                <div className="flex-1 sm:flex-initial px-6 py-3.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-700 font-extrabold text-[14px] flex items-center justify-center">
+                  Waitlist #{waitlistPosition}
+                </div>
+                <button
+                  onClick={handleCancel}
+                  disabled={loadingAction}
+                  className="px-6 py-3.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-600 hover:bg-red-500/20 font-extrabold text-[14px] transition-all"
+                >
+                  Leave
+                </button>
+              </div>
+            ) : isBlocked ? (
+              <div className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-gray-200 text-gray-500 font-extrabold text-[14px] text-center">
+                Account Blocked
+              </div>
             ) : (
               <button
-                disabled
-                className="flex-1 bg-gray-300 text-gray-600 py-4 rounded-lg font-bold text-lg cursor-not-allowed"
+                onClick={handleRegister}
+                disabled={loadingAction}
+                className="w-full sm:w-auto px-8 py-3.5 rounded-full bg-[#1D1D1F] hover:bg-black text-white font-extrabold text-[14px] transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] active:scale-95 flex items-center justify-center gap-2"
               >
-                Event Full
+                <span>{loadingAction ? 'Processing...' : isFull ? 'Join Waitlist' : 'Register Now'}</span>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                </svg>
               </button>
             )}
-            
-            <button
-              onClick={onClose}
-              className="px-8 py-4 border-2 border-gray-300 rounded-lg font-semibold
-                       hover:bg-gray-50 transition-colors"
-            >
-              Close
-            </button>
           </div>
         </div>
-      </div>
-    </Modal>
-  );
-};
 
-// Sub-components
-
-const InfoCard: React.FC<{
-  icon: string;
-  label: string;
-  value: string;
-  highlight?: boolean;
-}> = ({ icon, label, value, highlight }) => (
-  <div className={`p-4 rounded-lg ${highlight ? 'bg-orange-50 border-2 border-orange-200' : 'bg-gray-50'}`}>
-    <div className="text-2xl mb-2">{icon}</div>
-    <div className="text-xs text-gray-600 mb-1">{label}</div>
-    <div className={`font-semibold ${highlight ? 'text-orange-600' : 'text-gray-900'}`}>
-      {value}
-    </div>
-  </div>
-);
-
-const TabButton: React.FC<{
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}> = ({ active, onClick, children }) => (
-  <button
-    onClick={onClick}
-    className={`pb-3 px-1 font-medium transition-colors relative
-      ${active ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-  >
-    {children}
-    {active && (
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
-    )}
-  </button>
-);
-
-const OverviewTab: React.FC<{ event: Event }> = ({ event }) => (
-  <div className="space-y-6">
-    {/* Description */}
-    <div>
-      <h3 className="text-xl font-bold mb-3">About This Event</h3>
-      <p className="text-gray-700 leading-relaxed whitespace-pre-line">
-        {event.longDescription || event.description}
-      </p>
-    </div>
-
-    {/* What You'll Learn */}
-    {event.whatYouWillLearn && event.whatYouWillLearn.length > 0 && (
-      <div>
-        <h3 className="text-xl font-bold mb-3">What You'll Learn</h3>
-        <ul className="space-y-2">
-          {event.whatYouWillLearn.map((item, idx) => (
-            <li key={idx} className="flex items-start gap-3">
-              <span className="text-green-500 mt-1">✓</span>
-              <span className="text-gray-700">{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
-
-    {/* Prerequisites */}
-    {event.prerequisites && event.prerequisites.length > 0 && (
-      <div>
-        <h3 className="text-xl font-bold mb-3">Prerequisites</h3>
-        <ul className="space-y-2">
-          {event.prerequisites.map((item, idx) => (
-            <li key={idx} className="flex items-start gap-3">
-              <span className="text-blue-500">•</span>
-              <span className="text-gray-700">{item}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
-
-    {/* Hackathon Prizes */}
-    {event.type === 'hackathon' && event.prizes && (
-      <div>
-        <h3 className="text-xl font-bold mb-3">🏆 Prizes</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {event.prizes.map((prize, idx) => (
-            <div key={idx} className="bg-gradient-to-br from-yellow-50 to-orange-50 
-                                    border-2 border-yellow-200 rounded-lg p-4 text-center">
-              <div className="text-3xl mb-2">
-                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}
-              </div>
-              <div className="font-bold text-lg mb-1">{prize.position} Prize</div>
-              <div className="text-2xl font-bold text-orange-600 mb-2">
-                {prize.amount}
-              </div>
-              {prize.description && (
-                <div className="text-sm text-gray-600">{prize.description}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-
-    {/* Hackathon Tracks */}
-    {event.type === 'hackathon' && event.tracks && (
-      <div>
-        <h3 className="text-xl font-bold mb-3">Tracks</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {event.tracks.map((track) => (
-            <div 
-              key={track.id}
-              className="p-4 border-2 rounded-lg"
-              style={{ borderColor: track.color }}
-            >
-              <h4 className="font-bold mb-2" style={{ color: track.color }}>
-                {track.name}
-              </h4>
-              <p className="text-sm text-gray-600">{track.description}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-
-    {/* Additional Info */}
-    <div className="flex flex-wrap gap-4 pt-4 border-t">
-      {event.level && (
-        <div className="flex items-center gap-2">
-          <span className="text-gray-600">Level:</span>
-          <Badge>{event.level}</Badge>
-        </div>
-      )}
-      {event.certificateProvided && (
-        <div className="flex items-center gap-2 text-green-600">
-          <span>✓</span>
-          <span>Certificate Provided</span>
-        </div>
-      )}
-      {event.recordingAvailable && (
-        <div className="flex items-center gap-2 text-blue-600">
-          <span>🎥</span>
-          <span>Recording Available</span>
-        </div>
-      )}
-    </div>
-  </div>
-);
-
-const ScheduleTab: React.FC<{ schedule: Event['schedule'] }> = ({ schedule }) => (
-  <div className="space-y-4">
-    {schedule?.map((item, idx) => (
-      <div key={item.id} className="flex gap-4">
-        <div className="flex flex-col items-center">
-          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center 
-                         font-bold text-blue-600">
-            {idx + 1}
-          </div>
-          {idx < schedule.length - 1 && (
-            <div className="w-0.5 h-full bg-blue-200 my-2" />
-          )}
-        </div>
-        <div className="flex-1 pb-8">
-          <div className="text-sm text-gray-500 mb-1">{item.time}</div>
-          <h4 className="font-bold text-lg mb-1">{item.title}</h4>
-          <p className="text-gray-600 mb-2">{item.description}</p>
-          {item.speaker && (
-            <div className="text-sm text-blue-600">👤 {item.speaker}</div>
-          )}
-          <div className="text-xs text-gray-500 mt-1">
-            Duration: {item.duration} minutes
-          </div>
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-const SpeakersTab: React.FC<{ speakers: Event['speakers'] }> = ({ speakers }) => (
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-    {speakers?.map((speaker) => (
-      <div key={speaker.id} className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-        <div className="flex-shrink-0">
-          {speaker.image ? (
-            <img
-              src={speaker.image}
-              alt={speaker.name}
-              className="w-20 h-20 rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 
-                          flex items-center justify-center text-white text-2xl font-bold">
-              {speaker.name.charAt(0)}
-            </div>
-          )}
-        </div>
-        <div className="flex-1">
-          <h4 className="font-bold text-lg mb-1">{speaker.name}</h4>
-          <p className="text-sm text-gray-600 mb-2">{speaker.title}</p>
-          <p className="text-sm text-gray-700 mb-3">{speaker.bio}</p>
-          <div className="flex gap-3">
-            {speaker.linkedin && (
-              <a
-                href={speaker.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-700"
-              >
-                LinkedIn
-              </a>
-            )}
-            {speaker.twitter && (
-              <a
-                href={speaker.twitter}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-500"
-              >
-                Twitter
-              </a>
-            )}
-          </div>
-        </div>
-      </div>
-    ))}
-  </div>
-);
-
-const HackathonTeamForm: React.FC<{
-  teamData: any;
-  setTeamData: any;
-  teamSize?: { min: number; max: number };
-}> = ({ teamData, setTeamData, teamSize }) => {
-  const addMember = () => {
-    if (!teamSize || teamData.members.length < teamSize.max) {
-      setTeamData({
-        ...teamData,
-        members: [...teamData.members, '']
-      });
-    }
-  };
-
-  const removeMember = (index: number) => {
-    setTeamData({
-      ...teamData,
-      members: teamData.members.filter((_: any, i: number) => i !== index)
-    });
-  };
-
-  const updateMember = (index: number, value: string) => {
-    const newMembers = [...teamData.members];
-    newMembers[index] = value;
-    setTeamData({ ...teamData, members: newMembers });
-  };
-
-  return (
-    <div className="mb-6 p-6 bg-purple-50 border-2 border-purple-200 rounded-lg">
-      <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <span>👥</span>
-        <span>Team Registration</span>
-      </h3>
-      
-      {teamSize && (
-        <p className="text-sm text-gray-600 mb-4">
-          Team size: {teamSize.min} - {teamSize.max} members
-        </p>
-      )}
-
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-2">Team Name *</label>
-          <input
-            type="text"
-            value={teamData.teamName}
-            onChange={(e) => setTeamData({ ...teamData, teamName: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-            placeholder="Enter your team name"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">Team Members</label>
-          {teamData.members.map((member: string, index: number) => (
-            <div key={index} className="flex gap-2 mb-2">
-              <input
-                type="email"
-                value={member}
-                onChange={(e) => updateMember(index, e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
-                placeholder={`Member ${index + 1} email`}
-              />
-              {index > 0 && (
-                <button
-                  onClick={() => removeMember(index)}
-                  className="px-4 py-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-          
-          {(!teamSize || teamData.members.length < teamSize.max) && (
-            <button
-              onClick={addMember}
-              className="mt-2 px-4 py-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200"
-            >
-              + Add Member
-            </button>
-          )}
-        </div>
-      </div>
+      </main>
     </div>
   );
 };
 
-// Helper function
-function getStatusBadgeColor(status: Event['status']) {
-  switch (status) {
-    case 'upcoming': return 'bg-blue-100 text-blue-800';
-    case 'ongoing': return 'bg-green-100 text-green-800';
-    case 'completed': return 'bg-gray-100 text-gray-800';
-    case 'cancelled': return 'bg-red-100 text-red-800';
-    default: return 'bg-gray-100 text-gray-800';
-  }
-}
+export default EventDetail;
