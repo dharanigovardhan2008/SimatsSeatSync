@@ -19,7 +19,7 @@ import type { DocumentData } from 'firebase/firestore';
 interface EventData {
   id: string;
   title: string;
-  type: 'Workshop' | 'Seminar';
+  type: 'Workshop' | 'Seminar'| 'Hackathon';
   date: string;
   start_time?: string;
   end_time?: string;
@@ -91,7 +91,7 @@ export const StudentDashboard: React.FC = () => {
   useEffect(() => {
     const unsubscribe = subscribeToEvents((eventsData: DocumentData[]) => {
       const filteredEvents = (eventsData as EventData[]).filter(event => {
-        if (event.type !== 'Workshop') return false;
+        if (!['Workshop', 'Seminar', 'Hackathon'].includes(event.type)) return false;
         if (isEventHidden(event)) return false;
         if (!event.target_branches || event.target_branches.length === 0) return true;
         return event.target_branches.includes(userData?.department || '');

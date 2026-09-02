@@ -40,6 +40,7 @@ export const DEPARTMENTS = [
 ];
 
 export type UserRole = 'student' | 'admin' | 'coordinator';
+export type EventType = 'Workshop' | 'Seminar' | 'Hackathon';
 
 const firebaseConfig = {
   apiKey: "AIzaSyAOOgIBLgcUOzRkbq2Y5i2IKI11eRH7rbk",
@@ -164,18 +165,19 @@ export interface EventTimelineItem {
   title: string;  // e.g. "Grand Opening Show"
 }
 
+// total_seats / available_seats are `null` to mean "unlimited seats — no cap"
 export interface EventData {
   id?: string;
   title: string;
-  type: 'Workshop' | 'Seminar';
+  type: EventType;
   about?: string;
   images?: string[];               // Cloudinary URLs
   location?: EventLocation;        // free-text address + lat/lng (OpenStreetMap)
   date: string;
   start_time?: string;
   end_time?: string;
-  total_seats: number;
-  available_seats: number;
+  total_seats: number | null;      // null = unlimited
+  available_seats: number | null;  // null = unlimited
   registration_fee?: number;       // 0 = free
   status: 'Upcoming' | 'Closed';
   is_mandatory: boolean;
@@ -186,16 +188,26 @@ export interface EventData {
   created_at?: Timestamp;
 }
 
+// Strips any `undefined` values before writing to Firestore, since
+// addDoc()/updateDoc() throw on undefined (but null is fine).
+const stripUndefined = <T extends Record<string, unknown>>(obj: T): T => {
+  const clean = { ...obj };
+  (Object.keys(clean) as (keyof T)[]).forEach((key) => {
+    if (clean[key] === undefined) delete clean[key];
+  });
+  return clean;
+};
+
 export const createEvent = async (data: {
   title: string;
-  type: 'Workshop' | 'Seminar';
+  type: EventType;
   about?: string;
   images?: string[];
   location?: EventLocation;
   date: string;
   start_time: string;
   end_time: string;
-  total_seats: number;
+  total_seats: number | null;      // null = unlimited
   registration_fee?: number;
   is_mandatory: boolean;
   target_branches: string[];
@@ -204,12 +216,12 @@ export const createEvent = async (data: {
   coordinator_name?: string;
 }) => {
   const eventsRef = collection(db, 'events');
-  return addDoc(eventsRef, {
+  return addDoc(eventsRef, stripUndefined({
     ...data,
-    available_seats: data.total_seats,
+    available_seats: data.total_seats, // null stays null (unlimited)
     status: 'Upcoming',
     created_at: serverTimestamp()
-  });
+  }));
 };
 
 export const updateEventStatus = async (eventId: string, status: 'Upcoming' | 'Closed') => {
@@ -219,7 +231,28 @@ export const updateEventStatus = async (eventId: string, status: 'Upcoming' | 'C
 
 export const updateEvent = async (eventId: string, data: Partial<EventData>) => {
   const eventRef = doc(db, 'events', eventId);
-  return updateDoc(eventRef, data);
+  // If total_seats is being changed, keep available_seats in sync when going
+  // to/from unlimited. Preserve the existing enrolled count otherwise.
+  const payload: Partial<EventData> = { ...data };
+  if ('total_seats' in data) {
+    if (data.total_seats === null) {
+      payload.available_seats = null;
+    } else if (payload.available_seats === undefined) {
+      // Caller didn't explicitly set available_seats — re-derive it so a
+      // seat-count edit doesn't silently reset who's already enrolled.
+      const existing = await getDoc(eventRef);
+      if (existing.exists()) {
+        const prev = existing.data() as EventData;
+        const prevTotal = prev.total_seats ?? 0;
+        const prevAvailable = prev.available_seats ?? 0;
+        const enrolled = prevTotal - prevAvailable;
+        payload.available_seats = Math.max(0, (data.total_seats as number) - enrolled);
+      } else {
+        payload.available_seats = data.total_seats;
+      }
+    }
+  }
+  return updateDoc(eventRef, stripUndefined(payload));
 };
 
 export const deleteEvent = async (eventId: string): Promise<void> => {
@@ -358,10 +391,36 @@ export const registerForEvent = async (userId: string, eventId: string, userDepa
     throw new Error(`Time conflict with: ${conflictResult.conflictingEvent}`);
   }
 
+  // ── Unlimited-seat events skip the transaction/seat-decrement entirely ──
+  // (available_seats === null means "no cap")
+  if (eventData.available_seats === null || eventData.total_seats === null) {
+    const newRegRef = doc(registrationsRef);
+    await setDoc(newRegRef, {
+      user_id: userId,
+      event_id: eventId,
+      timestamp: serverTimestamp(),
+      status: 'confirmed'
+    });
+    return { status: 'registered' as const, message: 'Successfully registered!', registrationId: newRegRef.id };
+  }
+
   return runTransaction(db, async (transaction) => {
     const freshEvent = await transaction.get(eventRef);
     if (!freshEvent.exists()) throw new Error('Workshop does not exist');
     const freshData = freshEvent.data();
+
+    // Re-check in case the event was switched to unlimited between the
+    // read above and the transaction starting.
+    if (freshData.available_seats === null || freshData.total_seats === null) {
+      const newRegRef = doc(registrationsRef);
+      transaction.set(newRegRef, {
+        user_id: userId,
+        event_id: eventId,
+        timestamp: serverTimestamp(),
+        status: 'confirmed'
+      });
+      return { status: 'registered' as const, message: 'Successfully registered!', registrationId: newRegRef.id };
+    }
 
     if (freshData.available_seats > 0) {
       transaction.update(eventRef, { available_seats: freshData.available_seats - 1 });
@@ -408,6 +467,14 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
 
   const registrationDoc = regSnapshot.docs[0];
 
+  // Unlimited-seat events: just remove the registration, nothing to free up.
+  const eventSnapForCancel = await getDoc(eventRef);
+  const eventDataForCancel = eventSnapForCancel.exists() ? eventSnapForCancel.data() : null;
+  if (eventDataForCancel && (eventDataForCancel.available_seats === null || eventDataForCancel.total_seats === null)) {
+    await deleteDoc(registrationDoc.ref);
+    return { status: 'cancelled' };
+  }
+
   const waitlistQuery    = query(waitlistRef, where('event_id', '==', eventId));
   const waitlistSnapshot = await getDocs(waitlistQuery);
   const sortedWaitlist   = waitlistSnapshot.docs.sort((a, b) => (a.data().position || 0) - (b.data().position || 0));
@@ -433,7 +500,7 @@ export const cancelRegistration = async (userId: string, eventId: string) => {
       transaction.delete(nextInLine.ref);
       return { status: 'cancelled_and_promoted', promotedUserId: nextUserId };
     } else {
-      transaction.update(eventRef, { available_seats: eventData.available_seats + 1 });
+      transaction.update(eventRef, { available_seats: (eventData.available_seats ?? 0) + 1 });
       return { status: 'cancelled' };
     }
   });
@@ -523,10 +590,10 @@ export interface EventAnalytics {
   title: string;
   type: string;
   date: string;
-  totalSeats: number;
+  totalSeats: number | null;   // null = unlimited
   enrolledCount: number;
   waitlistCount: number;
-  utilizationPercent: number;
+  utilizationPercent: number | null; // null = not applicable (unlimited)
   demandLevel: 'High' | 'Medium' | 'Low';
   isMandatory: boolean;
 }
@@ -558,19 +625,29 @@ export const getEventAnalytics = async (): Promise<EventAnalytics[]> => {
     const event            = doc.data();
     const enrolledCount    = registrationsByEvent[doc.id] || 0;
     const waitlistCount    = waitlistByEvent[doc.id] || 0;
-    const utilizationPercent = event.total_seats > 0
-      ? Math.round((enrolledCount / event.total_seats) * 100) : 0;
+    const isUnlimited      = event.total_seats === null || event.total_seats === undefined;
+    const utilizationPercent = isUnlimited
+      ? null
+      : event.total_seats > 0
+        ? Math.round((enrolledCount / event.total_seats) * 100)
+        : 0;
 
     let demandLevel: 'High' | 'Medium' | 'Low' = 'Low';
-    if (utilizationPercent >= 80 || waitlistCount > 0) demandLevel = 'High';
-    else if (utilizationPercent >= 50) demandLevel = 'Medium';
+    if (isUnlimited) {
+      // For unlimited events, judge demand purely on raw signups.
+      if (enrolledCount >= 100) demandLevel = 'High';
+      else if (enrolledCount >= 30) demandLevel = 'Medium';
+    } else {
+      if ((utilizationPercent as number) >= 80 || waitlistCount > 0) demandLevel = 'High';
+      else if ((utilizationPercent as number) >= 50) demandLevel = 'Medium';
+    }
 
     return {
       eventId: doc.id,
       title: event.title,
       type: event.type,
       date: event.date,
-      totalSeats: event.total_seats,
+      totalSeats: isUnlimited ? null : event.total_seats,
       enrolledCount,
       waitlistCount,
       utilizationPercent,

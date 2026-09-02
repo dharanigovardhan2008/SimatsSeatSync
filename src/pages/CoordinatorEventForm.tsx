@@ -7,8 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { ImageUploader } from '@/components/events/ImageUploader';
-import { EventMap } from '@/components/events/EventMap';
-import { geocodeAddress } from '@/lib/geocode';
+import { LocationPicker } from '@/components/events/LocationPicker';
 import {
   createEvent,
   updateEvent,
@@ -16,9 +15,16 @@ import {
   DEPARTMENTS,
   type EventLocation,
   type EventTimelineItem,
+  type EventType,
 } from '@/lib/firebase';
 
 const DEPT_OPTIONS = DEPARTMENTS.map((d) => ({ value: d, label: d }));
+
+const TYPE_OPTIONS: { value: EventType; label: string }[] = [
+  { value: 'Seminar', label: 'Seminar' },
+  { value: 'Workshop', label: 'Workshop' },
+  { value: 'Hackathon', label: 'Hackathon' },
+];
 
 export const CoordinatorEventForm: React.FC = () => {
   const { eventId } = useParams();
@@ -27,15 +33,14 @@ export const CoordinatorEventForm: React.FC = () => {
   const { user, userData } = useAuth();
 
   const [title, setTitle] = useState('');
-  const [type, setType] = useState<'Workshop' | 'Seminar'>('Seminar');
+  const [type, setType] = useState<EventType>('Seminar');
   const [about, setAbout] = useState('');
   const [images, setImages] = useState<string[]>([]);
-  const [address, setAddress] = useState('');
   const [location, setLocation] = useState<EventLocation | null>(null);
-  const [geocoding, setGeocoding] = useState(false);
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [unlimitedSeats, setUnlimitedSeats] = useState(false);
   const [totalSeats, setTotalSeats] = useState(50);
   const [fee, setFee] = useState(0);
   const [targetBranches, setTargetBranches] = useState<string[]>([]);
@@ -52,34 +57,18 @@ export const CoordinatorEventForm: React.FC = () => {
       setType(ev.type || 'Seminar');
       setAbout(ev.about || '');
       setImages(ev.images || []);
-      setAddress(ev.location?.address || '');
       setLocation(ev.location || null);
       setDate(ev.date || '');
       setStartTime(ev.start_time || '');
       setEndTime(ev.end_time || '');
-      setTotalSeats(ev.total_seats || 50);
+      const isUnlimited = ev.total_seats === null || ev.total_seats === undefined;
+      setUnlimitedSeats(isUnlimited);
+      setTotalSeats(isUnlimited ? 50 : ev.total_seats);
       setFee(ev.registration_fee || 0);
       setTargetBranches(ev.target_branches || []);
       setTimeline(ev.timeline?.length ? ev.timeline : [{ time: '', title: '' }]);
     })();
   }, [isEdit, eventId]);
-
-  const handleLocate = async () => {
-    setError('');
-    setGeocoding(true);
-    try {
-      const result = await geocodeAddress(address);
-      if (!result) {
-        setError('Could not find that address — try adding city/country.');
-        return;
-      }
-      setLocation({ address, lat: result.lat, lng: result.lng });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Geocoding failed');
-    } finally {
-      setGeocoding(false);
-    }
-  };
 
   const toggleBranch = (branch: string) => {
     setTargetBranches((prev) =>
@@ -102,6 +91,10 @@ export const CoordinatorEventForm: React.FC = () => {
       setError('Title, date, start time and end time are required.');
       return;
     }
+    if (!unlimitedSeats && (!totalSeats || totalSeats < 1)) {
+      setError('Enter a valid number of seats, or turn on Unlimited Seats.');
+      return;
+    }
     if (!user || !userData) return;
 
     setSaving(true);
@@ -111,17 +104,17 @@ export const CoordinatorEventForm: React.FC = () => {
         type,
         about,
         images,
-        location: location || undefined,
         date,
         start_time: startTime,
         end_time: endTime,
-        total_seats: totalSeats,
+        total_seats: unlimitedSeats ? null : totalSeats,
         registration_fee: fee,
         is_mandatory: false,
         target_branches: targetBranches,
         timeline: timeline.filter((t) => t.time && t.title),
         coordinator_id: user.uid,
         coordinator_name: userData.name,
+        ...(location ? { location } : {}),
       };
 
       if (isEdit && eventId) {
@@ -156,11 +149,8 @@ export const CoordinatorEventForm: React.FC = () => {
             <Select
               label="Type"
               value={type}
-              onChange={(e) => setType(e.target.value as 'Workshop' | 'Seminar')}
-              options={[
-                { value: 'Seminar', label: 'Seminar' },
-                { value: 'Workshop', label: 'Workshop' },
-              ]}
+              onChange={(e) => setType(e.target.value as EventType)}
+              options={TYPE_OPTIONS}
             />
 
             <div>
@@ -176,25 +166,7 @@ export const CoordinatorEventForm: React.FC = () => {
 
             <ImageUploader images={images} onChange={setImages} />
 
-            <div>
-              <label className="block text-sm font-medium text-[#3D4852] mb-2">Location</label>
-              <div className="flex gap-3">
-                <Input
-                  className="flex-1"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Venue, city, country"
-                />
-                <Button type="button" variant="secondary" onClick={handleLocate} isLoading={geocoding}>
-                  Locate
-                </Button>
-              </div>
-              {location && (
-                <div className="mt-3">
-                  <EventMap lat={location.lat} lng={location.lng} label={title} heightClassName="h-48" />
-                </div>
-              )}
-            </div>
+            <LocationPicker value={location} onChange={setLocation} />
 
             <div className="grid grid-cols-3 gap-4">
               <Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -203,13 +175,29 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Total Seats"
-                type="number"
-                min={1}
-                value={totalSeats}
-                onChange={(e) => setTotalSeats(Number(e.target.value))}
-              />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-[#3D4852]">Total Seats</label>
+                  <label className="flex items-center gap-2 text-xs text-[#6B7280] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={unlimitedSeats}
+                      onChange={(e) => setUnlimitedSeats(e.target.checked)}
+                      className="w-4 h-4 rounded accent-[#6C63FF]"
+                    />
+                    Unlimited seats
+                  </label>
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  value={unlimitedSeats ? '' : totalSeats}
+                  onChange={(e) => setTotalSeats(Number(e.target.value))}
+                  disabled={unlimitedSeats}
+                  placeholder={unlimitedSeats ? 'Unlimited' : undefined}
+                  className={unlimitedSeats ? 'opacity-50 cursor-not-allowed' : ''}
+                />
+              </div>
               <Input
                 label="Registration Fee (₹, 0 = free)"
                 type="number"
