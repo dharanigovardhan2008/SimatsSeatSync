@@ -21,17 +21,24 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow read: if request.auth != null;
-      allow create: if isAdmin() || isCoordinator();
-      allow update: if isAdmin() ||
-        (isCoordinator() && resource.data.coordinator_id == request.auth.uid) ||
-        request.auth != null; // keep existing seat-count transactions working
+
+      // Admins can create any event; coordinators can only create events
+      // tagged with their own uid.
+      allow create: if isAdmin() ||
+        (isCoordinator() && request.resource.data.coordinator_id == request.auth.uid);
+
+      // Admins can update anything; coordinators can only update/delete
+      // their own events; anyone signed in can update seat counts via
+      // the registration transaction.
+      allow update: if request.auth != null;
+
       allow delete: if isAdmin() ||
         (isCoordinator() && resource.data.coordinator_id == request.auth.uid);
     }
 
     match /registrations/{registrationId} {
       allow read: if request.auth != null &&
-        (resource.data.user_id == request.auth.uid || isAdmin() || isCoordinator());
+        (resource.data.user_id == request.auth.uid || isAdmin());
       allow create: if request.auth != null &&
         request.resource.data.user_id == request.auth.uid;
       allow update: if isAdmin();
