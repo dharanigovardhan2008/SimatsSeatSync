@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { subscribeToTeamsJoined, TeamInvitation } from '@/lib/firebase';
-import { Check } from 'lucide-react';
+import { subscribeToTeamInvitesSent, getMyTeam, type TeamInvitation } from '@/lib/firebase';
+import { Check, Shield, Users, AlertCircle, Sparkles } from 'lucide-react';
 
-interface SelectedTeammate {
+export interface SelectedTeammate {
   uid: string;
   name: string;
   email?: string;
@@ -17,70 +17,97 @@ interface TeamEnrollModalProps {
   leaderName: string;
   leaderId: string;
   maxTeamSize: number;
-  minTeamSize: number;
-  requiresEmail: boolean;
+  minTeamSize?: number;
+  requiresEmail?: boolean;
   submitting: boolean;
   error?: string;
-  onSubmit: (teamName: string, selectedMembers: SelectedTeammate[]) => void;
+  onSubmit: (teamName: string, selectedTeammates: SelectedTeammate[]) => void;
 }
 
-// Collects a team name plus every *other* teammate's details — the
-// signed-in student (leader) is shown as an already-filled row and is
-// not asked for again.
 export const TeamEnrollModal: React.FC<TeamEnrollModalProps> = ({
-  isOpen, onClose, leaderName, leaderId, maxTeamSize, minTeamSize, requiresEmail, submitting, error, onSubmit,
+  isOpen,
+  onClose,
+  leaderName,
+  leaderId,
+  maxTeamSize,
+  minTeamSize = 1,
+  submitting,
+  error,
+  onSubmit,
 }) => {
   const [teamName, setTeamName] = useState('');
   const [acceptedTeammates, setAcceptedTeammates] = useState<TeamInvitation[]>([]);
-  const [loadingTeammates, setLoadingTeammates] = useState(false);
+  const [loadingTeammates, setLoadingTeammates] = useState(true);
   const [selectedUids, setSelectedUids] = useState<Set<string>>(new Set());
+  const [hasInitializedSelection, setHasInitializedSelection] = useState(false);
 
-  // Load accepted teammates when modal opens
+  // Subscribe to the authenticated leader's real-time accepted squad members
   useEffect(() => {
-    if (!isOpen || !leaderId) return;
+    if (!isOpen || !leaderId) {
+      setTeamName('');
+      setAcceptedTeammates([]);
+      setSelectedUids(new Set());
+      setHasInitializedSelection(false);
+      setLoadingTeammates(true);
+      return;
+    }
 
     setLoadingTeammates(true);
-    const unsub = subscribeToTeamsJoined(leaderId, (teams) => {
-      const accepted = teams.filter(t => t.status === 'accepted');
+
+    // Fetch saved squad name
+    getMyTeam(leaderId).then((team) => {
+      if (team?.team_name) {
+        setTeamName(team.team_name);
+      } else {
+        setTeamName(`${leaderName}'s Squad`);
+      }
+    }).catch(() => {
+      setTeamName(`${leaderName}'s Squad`);
+    });
+
+    // Real-time listener for the squad invitations sent by this leader
+    const unsub = subscribeToTeamInvitesSent(leaderId, (invites) => {
+      const accepted = invites.filter((i) => i.status === 'accepted' && i.recipient_id);
       setAcceptedTeammates(accepted);
       setLoadingTeammates(false);
 
-      // Auto-select all accepted teammates (including leader)
-      const newSelectedUids = new Set<string>([leaderId]);
-      accepted.forEach(t => {
-        if (t.recipient_id) newSelectedUids.add(t.recipient_id);
-      });
-      setSelectedUids(newSelectedUids);
+      // Preselect all accepted teammates up to max allowed when data first loads
+      if (!hasInitializedSelection) {
+        const initialUids = new Set<string>();
+        const maxTeammatesToAdd = Math.max(0, maxTeamSize - 1);
+        accepted.slice(0, maxTeammatesToAdd).forEach((t) => {
+          if (t.recipient_id) {
+            initialUids.add(t.recipient_id);
+          }
+        });
+        setSelectedUids(initialUids);
+        setHasInitializedSelection(true);
+      }
     });
 
-    return () => unsub();
-  }, [isOpen, leaderId]);
+    return () => {
+      unsub();
+    };
+  }, [isOpen, leaderId, leaderName, maxTeamSize, hasInitializedSelection]);
 
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setTeamName('');
-      setAcceptedTeammates([]);
-      setSelectedUids(new Set([leaderId]));
-    }
-  }, [isOpen, leaderId]);
+  const acceptedCount = acceptedTeammates.length;
+  const selectedTeammatesCount = selectedUids.size;
+  const totalTeamCount = 1 + selectedTeammatesCount; // Leader + selected teammates
+  const maxAllowedTeammates = Math.max(0, maxTeamSize - 1);
 
-  const maxAdditionalTeammates = Math.max(0, maxTeamSize - 1);
-  const selectedCount = selectedUids.size - (selectedUids.has(leaderId) ? 1 : 0);
-  const totalSelectedCount = selectedUids.size;
-  const isTeamSizeValid = totalSelectedCount >= minTeamSize && totalSelectedCount <= maxTeamSize;
+  const isTeamSizeValid = totalTeamCount >= minTeamSize && totalTeamCount <= maxTeamSize;
   const canConfirm = teamName.trim().length > 0 && isTeamSizeValid && !submitting;
 
   const handleToggleTeammate = (uid: string) => {
-    if (uid === leaderId) return; // Leader cannot be deselected
+    if (!uid) return;
 
-    setSelectedUids(prev => {
+    setSelectedUids((prev) => {
       const next = new Set(prev);
       if (next.has(uid)) {
         next.delete(uid);
       } else {
-        // Check if we haven't reached max team size
-        if (next.size < maxTeamSize) {
+        // Only allow selecting if not exceeding max team size
+        if (next.size < maxAllowedTeammates) {
           next.add(uid);
         }
       }
@@ -90,44 +117,39 @@ export const TeamEnrollModal: React.FC<TeamEnrollModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!canConfirm) return;
 
-    // Create selected members array (leader is always included)
-    const leaderMember: SelectedTeammate = { uid: leaderId, name: leaderName };
-    const selectedMembers: SelectedTeammate[] = [leaderMember];
+    // Filter only the accepted teammates whose UIDs are selected
+    const selected: SelectedTeammate[] = acceptedTeammates
+      .filter((t) => t.recipient_id && selectedUids.has(t.recipient_id))
+      .map((t) => ({
+        uid: t.recipient_id!,
+        name: t.recipient_name || 'Teammate',
+        email: t.recipient_email ? t.recipient_email.trim() : undefined,
+      }));
 
-    // Add selected teammates (excluding leader)
-    acceptedTeammates.forEach(t => {
-      if (t.recipient_id && t.recipient_id !== leaderId && selectedUids.has(t.recipient_id)) {
-        selectedMembers.push({
-          uid: t.recipient_id,
-          name: t.recipient_name || 'Teammate',
-          email: t.recipient_email || undefined
-        });
-      }
-    });
-
-    // Validate team size
-    if (selectedMembers.length < minTeamSize || selectedMembers.length > maxTeamSize) {
-      // Should not happen due to canConfirm check, but just in case
-      return;
-    }
-
-    onSubmit(teamName.trim(), selectedMembers);
+    // onSubmit delivers the selected teammates to EventDetail (leader is added at index 0 by finishTeamRegistration)
+    onSubmit(teamName.trim(), selected);
   };
-
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="medium">
-      <div className="p-8">
-        <h2 className="text-2xl font-bold text-[#1D1D1F] mb-1">Team Details</h2>
+      <div className="p-6 sm:p-8">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="p-1.5 rounded-xl bg-[#3B9EFF]/10 text-[#3B9EFF]">
+            <Users size={20} />
+          </span>
+          <h2 className="text-2xl font-black text-[#1D1D1F] tracking-tight">Team Details</h2>
+        </div>
         <p className="text-sm text-[#5E6C84] mb-6">
-          Select which accepted teammates to register for this event. Team size must be between {minTeamSize} and {maxTeamSize} members.
+          Choose which accepted teammates from your squad will participate in this event.
         </p>
 
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>
+          <div className="mb-4 p-3.5 rounded-2xl bg-red-50 text-red-600 text-sm font-medium flex items-center gap-2 border border-red-100">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{error}</span>
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -135,96 +157,147 @@ export const TeamEnrollModal: React.FC<TeamEnrollModalProps> = ({
             label="Team Name"
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
-            placeholder="e.g. The Byte Squad"
+            placeholder="e.g. Byte Squad"
             required
           />
 
-          {/* Current user — always the leader, prefilled and locked */}
+          {/* Leader Card (Always locked and included) */}
           <div>
-            <label className="block text-sm font-medium text-[#3D4852] mb-2">Team Leader (You)</label>
-            <div className="flex items-center gap-3 p-4 rounded-2xl bg-[#3B9EFF]/10 border-2 border-[#3B9EFF]/30">
-              <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 bg-[#3B9EFF] text-white">
-                <Check size={14} strokeWidth={3} />
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#86868B] mb-2">
+              Team Leader
+            </label>
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-gray-50 to-white border border-gray-200/90 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-[#1D1D1F] text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                  {leaderName ? leaderName.charAt(0).toUpperCase() : 'L'}
+                </div>
+                <div>
+                  <p className="font-bold text-[14px] text-[#1D1D1F]">{leaderName}</p>
+                  <p className="text-[11px] text-[#5E6C84]">Leader (You)</p>
+                </div>
               </div>
-              <p className="font-bold text-[14px] text-[#1D1D1F]">{leaderName}</p>
-              <span className="ml-auto text-xs text-[#3B9EFF] font-medium">Always included</span>
+              <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#3B9EFF] bg-[#3B9EFF]/10 px-3 py-1 rounded-full">
+                <Shield size={13} />
+                Always Included
+              </span>
             </div>
           </div>
 
+          {/* Accepted Teammates Selection Section */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-[#3D4852]">Accepted Teammates</label>
-              <span className="text-xs text-[#6B7280]">
-                Selected: {selectedCount} / {maxAdditionalTeammates} (Total: {totalSelectedCount})
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#86868B]">
+                Accepted Teammates
+              </label>
+              <span className="text-xs font-bold text-[#3B9EFF] bg-[#3B9EFF]/10 px-2.5 py-0.5 rounded-full">
+                Selected: {selectedTeammatesCount} / {acceptedCount}
               </span>
             </div>
 
             {loadingTeammates ? (
-              <p className="text-sm text-[#86868B]">Loading teammates...</p>
+              <div className="p-6 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center gap-3 text-sm text-[#86868B]">
+                <div className="w-4 h-4 rounded-full border-2 border-[#3B9EFF] border-t-transparent animate-spin" />
+                <span>Loading your accepted squad members...</span>
+              </div>
             ) : acceptedTeammates.length === 0 ? (
-              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
-                <p className="text-sm text-[#5E6C84]">No accepted teammates yet.</p>
-                <p className="text-xs text-[#86868B] mt-1">Invite teammates from the Teams page before registering.</p>
+              <div className="p-5 rounded-2xl bg-gray-50 border border-gray-200/80 text-center">
+                <p className="text-sm font-semibold text-[#1D1D1F] mb-1">No accepted teammates yet</p>
+                <p className="text-xs text-[#5E6C84]">
+                  You can invite teammates on the <strong>Teams</strong> page. Once they accept your invitation, they will appear here.
+                </p>
               </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  {acceptedTeammates.map((t) => {
-                    const uid = t.recipient_id || '';
-                    const isSelected = uid && selectedUids.has(uid);
-                    const canSelect = selectedUids.size < maxTeamSize || isSelected;
+              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+                {acceptedTeammates.map((t) => {
+                  const uid = t.recipient_id || '';
+                  const isSelected = selectedUids.has(uid);
+                  const isFull = selectedTeammatesCount >= maxAllowedTeammates && !isSelected;
 
-                    return (
-                      <button
-                        key={uid || t.id}
-                        type="button"
-                        onClick={() => handleToggleTeammate(uid)}
-                        disabled={!canSelect && !isSelected}
-                        className={`w-full flex items-center gap-3 p-3 rounded-2xl border text-left transition-all ${
-                          isSelected
-                            ? 'bg-[#3B9EFF]/10 border-[#3B9EFF]/30'
-                            : canSelect
-                              ? 'bg-white border-gray-200 hover:border-[#3B9EFF]/30'
-                              : 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
-                        }`}
-                      >
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                          isSelected
-                            ? 'bg-[#3B9EFF] text-white'
-                            : 'bg-gray-200'
-                        }`}>
-                          {isSelected && <Check size={14} strokeWidth={3} />}
+                  return (
+                    <button
+                      key={uid || t.id}
+                      type="button"
+                      onClick={() => handleToggleTeammate(uid)}
+                      disabled={isFull}
+                      className={`w-full flex items-center justify-between p-3.5 rounded-2xl border text-left transition-all ${
+                        isSelected
+                          ? 'bg-[#3B9EFF]/10 border-[#3B9EFF]/40 shadow-sm'
+                          : isFull
+                          ? 'bg-gray-50 border-gray-200 opacity-40 cursor-not-allowed'
+                          : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                            isSelected
+                              ? 'bg-[#3B9EFF] text-white shadow-sm'
+                              : 'bg-gray-100 border border-gray-300 text-transparent'
+                          }`}
+                        >
+                          <Check size={13} strokeWidth={3.5} />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-[14px] text-[#1D1D1F]">{t.recipient_name || 'Teammate'}</p>
-                          <p className="text-[12px] text-[#86868B]">{t.recipient_email || 'No email'}</p>
+                        <div className="min-w-0">
+                          <p className="font-bold text-[14px] text-[#1D1D1F] truncate">
+                            {t.recipient_name || 'Teammate'}
+                          </p>
+                          {t.recipient_email && (
+                            <p className="text-[12px] text-[#86868B] truncate">
+                              {t.recipient_email}
+                            </p>
+                          )}
                         </div>
-                        {isSelected && (
-                          <span className="text-xs text-[#3B9EFF] font-medium">Selected</span>
+                      </div>
+
+                      <div className="shrink-0 pl-2">
+                        {isSelected ? (
+                          <span className="text-[11px] font-bold text-[#3B9EFF] bg-white/80 px-2.5 py-1 rounded-full border border-[#3B9EFF]/20">
+                            Selected
+                          </span>
+                        ) : isFull ? (
+                          <span className="text-[11px] font-bold text-gray-400">
+                            Team Full
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
+                            Tap to add
+                          </span>
                         )}
-                      </button>
-                    );
-                  })}
-                </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-                {/* Team size validation message */}
-                {!isTeamSizeValid && (
-                  <p className="text-xs text-red-500 mt-2">
-                    Team size must be between {minTeamSize} and {maxTeamSize} members (currently {totalSelectedCount})
-                  </p>
-                )}
-              </>
+            {/* Team size info and validation guidance */}
+            <div className="mt-3 flex items-center justify-between text-xs text-[#5E6C84] px-1">
+              <span>
+                Total team size: <strong className="text-[#1D1D1F]">{totalTeamCount}</strong> / {maxTeamSize} members
+              </span>
+              {minTeamSize > 1 && (
+                <span>
+                  Min required: <strong className="text-[#1D1D1F]">{minTeamSize}</strong>
+                </span>
+              )}
+            </div>
+
+            {totalTeamCount < minTeamSize && (
+              <p className="mt-2 text-xs text-amber-600 font-medium flex items-center gap-1.5">
+                <AlertCircle size={14} />
+                Please select at least {minTeamSize - totalTeamCount} more teammate{minTeamSize - totalTeamCount > 1 ? 's' : ''} to meet the minimum team size of {minTeamSize}.
+              </p>
             )}
           </div>
 
           <Button
             type="submit"
             variant="primary"
-            className="w-full"
+            className="w-full py-3.5 text-[15px] font-bold shadow-md"
             isLoading={submitting}
             disabled={!canConfirm}
           >
-            Confirm & Enroll Team ({totalSelectedCount} members)
+            Confirm & Enroll Team ({totalTeamCount} {totalTeamCount === 1 ? 'Member' : 'Members'})
           </Button>
         </form>
       </div>

@@ -757,12 +757,15 @@ export const registerTeamForEvent = async (
     );
   }
 
-  // Duplicate registration check (leader already registered/leading a team here?)
-  // A cancelled registration doesn't block re-registering.
-  const regQuery = query(registrationsRef, where('user_id', '==', leaderId), where('event_id', '==', eventId));
-  const existingReg = await getDocs(regQuery);
-  if (existingReg.docs.some(d => d.data().status !== 'cancelled')) {
-    throw new Error('You have already registered for this workshop');
+  // Duplicate registration check (All members cannot already be registered for this event)
+  for (const member of members) {
+    if (member.uid) {
+      const regQuery = query(registrationsRef, where('user_id', '==', member.uid), where('event_id', '==', eventId));
+      const existingReg = await getDocs(regQuery);
+      if (existingReg.docs.some(d => d.data().status !== 'cancelled')) {
+        throw new Error(`${member.name || 'A selected teammate'} is already registered for this event.`);
+      }
+    }
   }
 
   const eventDoc = await getDoc(eventRef);
