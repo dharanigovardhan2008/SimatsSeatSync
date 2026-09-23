@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { PaymentVerificationModal } from '@/components/events/PaymentVerificationModal';
 import { getEventById } from '@/lib/firebase';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import type { DocumentData } from 'firebase/firestore';
 
 /**
@@ -31,11 +32,7 @@ export const PaymentVerificationPage: React.FC = () => {
   const goBack = () => navigate(userData?.role === 'admin' ? '/admin/events' : '/coordinator');
 
   if (authLoading || !event) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-14 h-14 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (

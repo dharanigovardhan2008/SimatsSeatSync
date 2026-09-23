@@ -3,15 +3,17 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
-import { 
-  subscribeToUsers, 
-  subscribeToEvents, 
+import {
+  subscribeToUsers,
+  subscribeToEvents,
   subscribeToRegistrations,
   subscribeToWaitlist,
   getEventAnalytics,
   blockUser,
   unblockUser,
-  type EventAnalytics
+  calculateRevenue,
+  type EventAnalytics,
+  type RevenueData
 } from '@/lib/firebase';
 import type { DocumentData } from 'firebase/firestore';
 
@@ -56,7 +58,8 @@ export const AdminDashboard: React.FC = () => {
   const [registrations, setRegistrations] = useState<RegistrationData[]>([]);
   const [waitlist, setWaitlist] = useState<WaitlistData[]>([]);
   const [analytics, setAnalytics] = useState<EventAnalytics[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'users' | 'all-users'>('overview');
+  const [revenue, setRevenue] = useState<RevenueData | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'revenue' | 'users' | 'all-users'>('overview');
 
   // All Users tab state
   const [userSearch, setUserSearch] = useState('');
@@ -84,8 +87,12 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const analyticsData = await getEventAnalytics();
+        const [analyticsData, revenueData] = await Promise.all([
+          getEventAnalytics(),
+          calculateRevenue()
+        ]);
         setAnalytics(analyticsData);
+        setRevenue(revenueData);
       } catch (error) {
         console.error('Error fetching data:', error);
       }
@@ -176,7 +183,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Premium Stats Grid */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5 mb-10">
           <div className="bg-white/80 backdrop-blur-2xl rounded-[28px] p-5 shadow-[0_8px_30px_rgba(0,100,200,0.06)] border border-white flex flex-col sm:flex-row items-start sm:items-center gap-4 transition-transform hover:-translate-y-1">
-            <div className="w-12 h-12 rounded-full bg-indigo-500/10 text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-500/20">
+            <div className="w-12 h-12 rounded-full bg-[#3B9EFF]/10 text-[#3B9EFF] flex items-center justify-center shrink-0 border border-[#3B9EFF]/20">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
             </div>
             <div>
@@ -234,11 +241,12 @@ export const AdminDashboard: React.FC = () => {
             {([
               { id: 'overview', label: 'Seat Overview' },
               { id: 'analytics', label: 'Analytics & Demand' },
+              { id: 'revenue', label: 'Revenue' },
               { id: 'users', label: `Enrolled Students` },
               { id: 'all-users', label: `All Users ${blockedCount > 0 ? `(${blockedCount} Blocked)` : ''}` }
             ] as const).map(tab => (
-              <button 
-                key={tab.id} 
+              <button
+                key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
                 className={`px-6 py-2.5 rounded-full text-[14px] font-bold transition-all duration-300 ${
                   activeTab === tab.id
@@ -271,7 +279,7 @@ export const AdminDashboard: React.FC = () => {
                   return (
                     <div key={event.id} className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-6 shadow-[0_12px_40px_rgba(0,100,200,0.08)] hover:shadow-[0_18px_50px_rgba(0,100,200,0.12)] transition-all border border-white flex flex-col group relative overflow-hidden">
                       <div className="flex justify-between items-start mb-4">
-                        <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${event.type === 'Workshop' ? 'bg-[#6C63FF]/10 text-[#6C63FF]' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                        <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider ${event.type === 'Workshop' ? 'bg-[#3B9EFF]/10 text-[#3B9EFF]' : 'bg-emerald-500/10 text-emerald-600'}`}>
                           {event.type}
                         </span>
                         <div className="flex gap-2">
@@ -397,7 +405,85 @@ export const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* ── Tab 3: Enrolled Students ── */}
+        {/* ── Tab 3: Revenue ── */}
+        {activeTab === 'revenue' && (
+          <div>
+            <h2 className="font-extrabold text-[22px] text-[#1D1D1F] mb-6 tracking-tight">Revenue Overview</h2>
+
+            {!revenue || revenue.totalRevenue === 0 ? (
+              <div className="bg-white/70 backdrop-blur-2xl rounded-[36px] p-16 text-center border border-white/90 shadow-[0_8px_30px_rgba(0,100,200,0.06)]">
+                <p className="text-[#5E6C84] font-semibold text-[15px]">No paid events yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Revenue Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                  <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-[28px] p-6 shadow-lg text-white">
+                    <div className="flex items-center gap-3 mb-2">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-semibold opacity-90">Total Revenue</p>
+                    </div>
+                    <p className="text-4xl font-black">₹{revenue.totalRevenue.toLocaleString()}</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[28px] p-6 shadow-lg text-white">
+                    <div className="flex items-center gap-3 mb-2">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-semibold opacity-90">Verified</p>
+                    </div>
+                    <p className="text-4xl font-black">₹{revenue.verifiedRevenue.toLocaleString()}</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-[28px] p-6 shadow-lg text-white">
+                    <div className="flex items-center gap-3 mb-2">
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="text-sm font-semibold opacity-90">Pending</p>
+                    </div>
+                    <p className="text-4xl font-black">₹{revenue.pendingRevenue.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {/* Event-wise Revenue Breakdown */}
+                <div className="bg-white/80 backdrop-blur-2xl rounded-[32px] shadow-[0_12px_40px_rgba(0,100,200,0.08)] border border-white overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-white/50 backdrop-blur-md border-b border-black/5">
+                          <th className="py-4 px-6 text-[12px] font-extrabold text-[#5E6C84] uppercase tracking-wider">Event</th>
+                          <th className="py-4 px-6 text-[12px] font-extrabold text-[#5E6C84] uppercase tracking-wider text-center">Participants</th>
+                          <th className="py-4 px-6 text-[12px] font-extrabold text-[#5E6C84] uppercase tracking-wider text-center">Total Revenue</th>
+                          <th className="py-4 px-6 text-[12px] font-extrabold text-[#5E6C84] uppercase tracking-wider text-center">Verified</th>
+                          <th className="py-4 px-6 text-[12px] font-extrabold text-[#5E6C84] uppercase tracking-wider text-center">Pending</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-black/5">
+                        {revenue.eventBreakdown.map((item) => (
+                          <tr key={item.eventId} className="hover:bg-white/50 transition-colors">
+                            <td className="py-4 px-6">
+                              <span className="font-bold text-[15px] text-[#1D1D1F]">{item.eventTitle}</span>
+                            </td>
+                            <td className="py-4 px-6 text-center font-bold text-[#1D1D1F]">{item.participantCount}</td>
+                            <td className="py-4 px-6 text-center font-bold text-[#1D1D1F]">₹{item.totalRevenue.toLocaleString()}</td>
+                            <td className="py-4 px-6 text-center font-bold text-emerald-600">₹{item.verifiedRevenue.toLocaleString()}</td>
+                            <td className="py-4 px-6 text-center font-bold text-amber-600">₹{item.pendingRevenue.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab 4: Enrolled Students ── */}
         {activeTab === 'users' && (
           <div>
             <h2 className="font-extrabold text-[22px] text-[#1D1D1F] mb-6 tracking-tight">Active Students ({students.length})</h2>
@@ -424,7 +510,7 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="flex flex-wrap gap-2 md:max-w-[40%]">
                         {userEvents.length > 0 ? userEvents.map(event => (
-                          <span key={event?.id} className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold ${event?.type === 'Workshop' ? 'bg-[#6C63FF]/10 text-[#6C63FF]' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                          <span key={event?.id} className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold ${event?.type === 'Workshop' ? 'bg-[#3B9EFF]/10 text-[#3B9EFF]' : 'bg-emerald-500/10 text-emerald-600'}`}>
                             {event?.title}
                           </span>
                         )) : (

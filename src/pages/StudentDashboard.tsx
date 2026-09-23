@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { EnrollStatusOverlay } from '@/components/ui/EnrollStatusOverlay';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { 
   getApprovedEvents, 
   registerForEvent, 
@@ -276,11 +277,7 @@ export const StudentDashboard: React.FC = () => {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
-        <div className="w-8 h-8 rounded-full border-2 border-[#1D1D1F] border-t-transparent animate-spin"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   const upcomingEvents       = events.filter(e => e.status === 'Upcoming');
@@ -404,7 +401,7 @@ export const StudentDashboard: React.FC = () => {
                         {/* Title & Arrow Button Row */}
                         <div className="flex justify-between items-start gap-3">
                           <div className="flex-1 min-w-0">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#6C63FF]/10 text-[#6C63FF] mb-1.5">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#3B9EFF]/10 text-[#3B9EFF] mb-1.5">
                               {event.type}
                             </span>
                             <Link to={`/event/${event.id}`}>
@@ -557,7 +554,7 @@ export const StudentDashboard: React.FC = () => {
                         {/* Title & Arrow Button Row */}
                         <div className="flex justify-between items-start gap-3">
                           <div className="flex-1 min-w-0">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#6C63FF]/10 text-[#6C63FF] mb-1.5">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#3B9EFF]/10 text-[#3B9EFF] mb-1.5">
                               {event.type}
                             </span>
                             <Link to={`/event/${event.id}`}>

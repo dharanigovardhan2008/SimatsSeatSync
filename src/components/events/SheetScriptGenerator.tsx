@@ -438,7 +438,7 @@ export const SheetScriptGenerator: React.FC<SheetScriptGeneratorProps> = (props)
           {columns.map((col) => (
             <span
               key={col}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#6C63FF]/10 text-[#6C63FF]"
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#3B9EFF]/10 text-[#3B9EFF]"
             >
               {col}
             </span>

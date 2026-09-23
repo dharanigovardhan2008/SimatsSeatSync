@@ -8,9 +8,11 @@
     --color-background: #E0E5EC;
     --color-foreground: #3D4852;
     --color-muted: #6B7280;
-    --color-accent: #6C63FF;
-    --color-accent-light: #8B84FF;
-    --color-accent-secondary: #38B2AC;
+    /* SeatSync Color System - NO PURPLE */
+    --color-accent: #3B9EFF; /* Sky Blue - PRIMARY */
+    --color-accent-light: #007AFF; /* Deep Blue */
+    --color-accent-secondary: #38B2AC; /* Teal */
+    --color-green: #34C759; /* Success Green */
     --shadow-light: rgba(255, 255, 255, 0.5);
     --shadow-dark: rgb(163, 177, 198, 0.6);
   }
@@ -82,13 +84,13 @@
 
   .neu-btn:focus {
     @apply outline-none ring-2 ring-offset-2;
-    --tw-ring-color: #6C63FF;
+    --tw-ring-color: #3B9EFF;
     --tw-ring-offset-color: #E0E5EC;
   }
 
   .neu-btn-primary {
     @apply px-6 py-3 rounded-2xl font-medium transition-all duration-300 ease-out text-white;
-    background: linear-gradient(135deg, #6C63FF 0%, #8B84FF 100%);
+    background: linear-gradient(135deg, #3B9EFF 0%, #007AFF 100%);
     box-shadow: 9px 9px 16px rgb(163,177,198,0.6), -9px -9px 16px rgba(255,255,255,0.5);
   }
 
@@ -104,7 +106,7 @@
 
   .neu-btn-primary:focus {
     @apply outline-none ring-2 ring-offset-2;
-    --tw-ring-color: #6C63FF;
+    --tw-ring-color: #3B9EFF;
     --tw-ring-offset-color: #E0E5EC;
   }
 
@@ -135,7 +137,7 @@
 
   .neu-input:focus {
     @apply outline-none ring-2 ring-offset-2;
-    --tw-ring-color: #6C63FF;
+    --tw-ring-color: #3B9EFF;
     --tw-ring-offset-color: #E0E5EC;
     box-shadow: inset 10px 10px 20px rgb(163,177,198,0.7), inset -10px -10px 20px rgba(255,255,255,0.6);
   }
@@ -166,7 +168,7 @@
 
   .neu-select:focus {
     @apply outline-none ring-2 ring-offset-2;
-    --tw-ring-color: #6C63FF;
+    --tw-ring-color: #3B9EFF;
     --tw-ring-offset-color: #E0E5EC;
   }
 }
@@ -181,7 +183,7 @@
   }
 
   .text-accent {
-    color: #6C63FF;
+    color: #3B9EFF;
   }
 
   .bg-neumorphic {

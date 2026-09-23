@@ -77,7 +77,7 @@ export const EnrolledStudentsModal: React.FC<EnrolledStudentsModalProps> = ({
   const Row: React.FC<{ r: DocumentData; badge?: string }> = ({ r, badge }) => (
     <div className="flex items-center justify-between gap-3 py-3 px-4 rounded-2xl bg-[#F9F9FB] border border-black/5">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-9 h-9 rounded-full bg-[#6C63FF] text-white flex items-center justify-center font-bold text-sm shrink-0">
+        <div className="w-9 h-9 rounded-full bg-[#3B9EFF] text-white flex items-center justify-center font-bold text-sm shrink-0">
           {(r.participant_name || '?').charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
@@ -107,7 +107,7 @@ export const EnrolledStudentsModal: React.FC<EnrolledStudentsModalProps> = ({
           {regs.length > 0 && (
             <button
               onClick={downloadCsv}
-              className="text-[13px] font-bold text-[#6C63FF] hover:underline shrink-0"
+              className="text-[13px] font-bold text-[#3B9EFF] hover:underline shrink-0"
             >
               Download CSV
             </button>

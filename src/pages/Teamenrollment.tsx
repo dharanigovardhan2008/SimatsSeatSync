@@ -118,7 +118,7 @@ export const TeamEnrollModal: React.FC<TeamEnrollModalProps> = ({
               <button
                 type="button"
                 onClick={addTeammate}
-                className="mt-3 text-sm font-semibold text-[#6C63FF] hover:underline"
+                className="mt-3 text-sm font-semibold text-[#3B9EFF] hover:underline"
               >
                 + Add another teammate
               </button>

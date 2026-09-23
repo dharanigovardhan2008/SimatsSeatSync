@@ -24,7 +24,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
               'w-full px-5 py-4 rounded-2xl transition-all duration-300 ease-out appearance-none cursor-pointer',
               'bg-white/50 backdrop-blur-md border-none text-[#3D4852]',
               'shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)]',
-              'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#6C63FF] focus:ring-offset-[#E0E5EC]',
+              'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#3B9EFF] focus:ring-offset-[#E0E5EC]',
               error && 'ring-2 ring-red-400',
               className
             )}

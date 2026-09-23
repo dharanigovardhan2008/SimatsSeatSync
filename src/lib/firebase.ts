@@ -1,8 +1,8 @@
 // Firebase Configuration and Initialization
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  browserLocalPersistence, 
+import {
+  getAuth,
+  browserLocalPersistence,
   setPersistence,
   GoogleAuthProvider,
   signInWithEmailAndPassword,
@@ -12,18 +12,18 @@ import {
   onAuthStateChanged,
   type User
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  setDoc, 
+import {
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
   addDoc,
   updateDoc,
   deleteDoc,
-  query, 
-  where, 
+  query,
+  where,
   onSnapshot,
   runTransaction,
   writeBatch,
@@ -33,6 +33,7 @@ import {
   type DocumentData,
   Timestamp
 } from 'firebase/firestore';
+import { getMessaging, getToken, onMessage, type Messaging } from 'firebase/messaging';
 
 export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -64,6 +65,13 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
+let messaging: Messaging | null = null;
+try {
+  messaging = getMessaging(app);
+} catch (err) {
+  console.warn('FCM not supported in this environment:', err);
+}
+
 setPersistence(auth, browserLocalPersistence);
 
 export const loginWithEmail = async (email: string, password: string) => {
@@ -91,15 +99,21 @@ export const onAuthChange = (callback: (user: User | null) => void) => {
 // ============================================
 
 export const updateUserEmailField = async (uid: string, email: string) => {
-  await updateDoc(doc(db, 'users', uid), { email });
+  const cleanEmail = email.trim().toLowerCase();
+  await updateDoc(doc(db, 'users', uid), { email: cleanEmail });
 };
 
 export const createUserDocument = async (
-  uid: string, 
+  uid: string,
   data: { name: string; reg_no: string; department: string; role: UserRole; email?: string }
 ) => {
   const userRef = doc(db, 'users', uid);
-  await setDoc(userRef, { ...data, created_at: serverTimestamp() });
+  const cleanEmail = (data.email || '').trim().toLowerCase();
+  await setDoc(userRef, {
+    ...data,
+    email: cleanEmail,
+    created_at: serverTimestamp()
+  });
 };
 
 export const getUserDocument = async (uid: string) => {
@@ -123,18 +137,41 @@ export const createOrUpdateUserDocument = async (
 ) => {
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
-  const role: UserRole = email === ADMIN_EMAIL ? 'admin' : (data.role || 'student');
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const isAdminUser = cleanEmail === ADMIN_EMAIL.trim().toLowerCase();
+  const role: UserRole = isAdminUser ? 'admin' : (data.role || 'student');
+
   if (userSnap.exists()) {
-    if (email === ADMIN_EMAIL && userSnap.data().role !== 'admin') {
-      await updateDoc(userRef, { role: 'admin' });
+    const existing = userSnap.data();
+    const updates: Record<string, any> = {};
+
+    // Ensure email is always recorded in lowercase
+    if (cleanEmail && (!existing.email || existing.email.toLowerCase() !== cleanEmail)) {
+      updates.email = cleanEmail;
     }
-    return { id: userSnap.id, ...userSnap.data(), role: email === ADMIN_EMAIL ? 'admin' : userSnap.data().role };
+    // Update name if default placeholder
+    if (data.name && (!existing.name || existing.name === 'User' || existing.name === 'Student')) {
+      updates.name = data.name;
+    }
+    if (isAdminUser && existing.role !== 'admin') {
+      updates.role = 'admin';
+    }
+    if (Object.keys(updates).length > 0) {
+      await updateDoc(userRef, updates);
+    }
+    return {
+      id: userSnap.id,
+      ...existing,
+      ...updates,
+      email: cleanEmail || existing.email,
+      role: isAdminUser ? 'admin' : (existing.role || role)
+    };
   } else {
     const userData = {
-      name: data.name,
+      name: data.name || 'Student',
       reg_no: data.reg_no || '',
       department: data.department || '',
-      email: email,
+      email: cleanEmail,
       role,
       created_at: serverTimestamp()
     };
@@ -490,9 +527,9 @@ export const getEventRegistrations = async (eventId: string): Promise<DocumentDa
 // ============================================
 
 export const checkTimeConflict = async (
-  userId: string, 
-  eventDate: string, 
-  startTime: string, 
+  userId: string,
+  eventDate: string,
+  startTime: string,
   endTime: string,
   excludeEventId?: string
 ): Promise<{ hasConflict: boolean; conflictingEvent?: string }> => {
@@ -501,7 +538,10 @@ export const checkTimeConflict = async (
   const registrations = await getDocs(q);
   if (registrations.empty) return { hasConflict: false };
 
-  const eventIds = registrations.docs.map(doc => doc.data().event_id);
+  // Filter out cancelled registrations - they don't block re-registration
+  const activeRegistrations = registrations.docs.filter(doc => doc.data().status !== 'cancelled');
+  const eventIds = activeRegistrations.map(doc => doc.data().event_id);
+
   for (const eventId of eventIds) {
     if (eventId === excludeEventId) continue;
     const eventDoc = await getDoc(doc(db, 'events', eventId));
@@ -700,7 +740,7 @@ export const registerTeamForEvent = async (
   eventId: string,
   userDepartment: string,
   teamName: string,
-  members: { name: string; email?: string }[], // includes the leader as members[0]
+  members: { name: string; email?: string; uid?: string; reg_no?: string; department?: string }[], // includes the leader as members[0]
   payment?: PaymentProof
 ) => {
   const eventRef         = doc(db, 'events', eventId);
@@ -766,8 +806,9 @@ export const registerTeamForEvent = async (
   // invite link (see getTeamDoc / joinTeamAsMember).
   const teamDocRef = doc(db, 'teams', teamId);
 
-  const buildDoc = (member: { name: string; email?: string }, isLeader: boolean) => stripUndefined({
-    user_id: leaderId,
+  const buildDoc = (member: { name: string; email?: string; uid?: string }, isLeader: boolean) => stripUndefined({
+    user_id: member.uid || leaderId,
+    booked_by: leaderId,
     event_id: eventId,
     timestamp: serverTimestamp(),
     status: 'confirmed' as const,
@@ -781,6 +822,19 @@ export const registerTeamForEvent = async (
     payment_utr: isLeader ? payment?.utr : undefined,
     payment_amount: isLeader ? payment?.amount : undefined,
   });
+
+  const notifyTeammates = () => {
+    members.forEach((m, idx) => {
+      if (m.uid && m.uid !== leaderId) {
+        createNotification(
+          m.uid,
+          'Team Event Ticket Ready 🎟️',
+          `Your team leader ${members[0]?.name || 'Leader'} registered you for "${eventData.title}" in team "${teamName}".`,
+          `/ticket/${registrationIds[idx]}`
+        );
+      }
+    });
+  };
 
   const isUnlimited = eventData.available_seats === null || eventData.total_seats === null;
 
@@ -806,6 +860,7 @@ export const registerTeamForEvent = async (
       created_at: serverTimestamp(),
     });
     await batch.commit();
+    notifyTeammates();
     return { status: 'registered' as const, message: 'Team successfully registered!', teamId, registrationIds };
   }
 
@@ -850,6 +905,7 @@ export const registerTeamForEvent = async (
     });
   });
 
+  notifyTeammates();
   return { status: 'registered' as const, message: 'Team successfully registered!', teamId, registrationIds };
 };
 
@@ -1079,6 +1135,8 @@ export const createNotification = async (
     read: false,
     created_at: serverTimestamp(),
   }));
+  // Attempt real device push
+  await sendPushNotification(recipientId, title, message);
 };
 
 export const subscribeToNotifications = (
@@ -1399,8 +1457,12 @@ export const getEventAnalytics = async (): Promise<EventAnalytics[]> => {
   const waitlistByEvent: Record<string, number>      = {};
 
   regsSnap.docs.forEach(doc => {
-    const eventId = doc.data().event_id;
-    registrationsByEvent[eventId] = (registrationsByEvent[eventId] || 0) + 1;
+    const data = doc.data();
+    // Only count non-cancelled registrations
+    if (data.status !== 'cancelled') {
+      const eventId = data.event_id;
+      registrationsByEvent[eventId] = (registrationsByEvent[eventId] || 0) + 1;
+    }
   });
   waitlistSnap.docs.forEach(doc => {
     const eventId = doc.data().event_id;
@@ -1443,4 +1505,391 @@ export const getEventAnalytics = async (): Promise<EventAnalytics[]> => {
   });
 };
 
-export { auth, db };
+// ============================================
+// REVENUE CALCULATION
+// ============================================
+
+export interface RevenueData {
+  totalRevenue: number;
+  verifiedRevenue: number;
+  pendingRevenue: number;
+  eventBreakdown: {
+    eventId: string;
+    eventTitle: string;
+    totalRevenue: number;
+    verifiedRevenue: number;
+    pendingRevenue: number;
+    participantCount: number;
+  }[];
+}
+
+/** Calculate total revenue from paid events for a coordinator or all events (admin) */
+export const calculateRevenue = async (coordinatorId?: string): Promise<RevenueData> => {
+  const eventsRef = collection(db, 'events');
+  const registrationsRef = collection(db, 'registrations');
+
+  let eventsQuery;
+  if (coordinatorId) {
+    eventsQuery = query(eventsRef, where('coordinator_id', '==', coordinatorId), where('is_paid', '==', true));
+  } else {
+    eventsQuery = query(eventsRef, where('is_paid', '==', true));
+  }
+
+  const [eventsSnap, allRegsSnap] = await Promise.all([
+    getDocs(eventsQuery),
+    getDocs(registrationsRef)
+  ]);
+
+  const events = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  let totalRevenue = 0;
+  let verifiedRevenue = 0;
+  let pendingRevenue = 0;
+  const eventBreakdown: RevenueData['eventBreakdown'] = [];
+
+  for (const event of events) {
+    const eventRegs = allRegsSnap.docs
+      .filter(d => {
+        const data = d.data();
+        return data.event_id === event.id && data.status !== 'cancelled';
+      });
+
+    let eventTotal = 0;
+    let eventVerified = 0;
+    let eventPending = 0;
+
+    eventRegs.forEach(regDoc => {
+      const reg = regDoc.data();
+      const amount = reg.payment_amount || event.registration_fee || 0;
+
+      if (reg.payment_status === 'verified') {
+        eventVerified += amount;
+      } else if (reg.payment_status === 'pending_verification') {
+        eventPending += amount;
+      }
+      eventTotal += amount;
+    });
+
+    totalRevenue += eventTotal;
+    verifiedRevenue += eventVerified;
+    pendingRevenue += eventPending;
+
+    if (eventRegs.length > 0) {
+      eventBreakdown.push({
+        eventId: event.id,
+        eventTitle: event.title,
+        totalRevenue: eventTotal,
+        verifiedRevenue: eventVerified,
+        pendingRevenue: eventPending,
+        participantCount: eventRegs.length,
+      });
+    }
+  }
+
+  return {
+    totalRevenue,
+    verifiedRevenue,
+    pendingRevenue,
+    eventBreakdown,
+  };
+};
+
+export const getUserByEmail = async (email: string) => {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return null;
+  const usersRef = collection(db, 'users');
+
+  // 1. Try lowercase indexed search
+  const q = query(usersRef, where('email', '==', cleanEmail));
+  const snap = await getDocs(q);
+  if (!snap.empty) {
+    return { id: snap.docs[0].id, ...snap.docs[0].data() } as DocumentData & { id: string };
+  }
+
+  // 2. Try raw casing search
+  const qRaw = query(usersRef, where('email', '==', email.trim()));
+  const snapRaw = await getDocs(qRaw);
+  if (!snapRaw.empty) {
+    return { id: snapRaw.docs[0].id, ...snapRaw.docs[0].data() } as DocumentData & { id: string };
+  }
+
+  // 3. Fallback: full collection scan with case-insensitive compare (handles legacy records)
+  try {
+    const allUsersSnap = await getDocs(usersRef);
+    const found = allUsersSnap.docs.find((d) => {
+      const uEmail = d.data().email;
+      return typeof uEmail === 'string' && uEmail.trim().toLowerCase() === cleanEmail;
+    });
+    if (found) {
+      return { id: found.id, ...found.data() } as DocumentData & { id: string };
+    }
+  } catch (err) {
+    console.warn('Fallback getUserByEmail search failed:', err);
+  }
+
+  return null;
+};
+
+// ============================================
+// TEAM INVITATION & MANAGEMENT (INSTAGRAM STYLE)
+// ============================================
+
+export interface UserTeam {
+  id?: string;
+  leader_id: string;
+  leader_name: string;
+  leader_email?: string;
+  team_name: string;
+  created_at?: Timestamp;
+  updated_at?: Timestamp;
+}
+
+export type TeamInviteStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface TeamInvitation {
+  id: string;
+  team_id: string;
+  team_name: string;
+  leader_id: string;
+  leader_name: string;
+  leader_email?: string;
+  recipient_id: string;
+  recipient_name: string;
+  recipient_email?: string;
+  recipient_department?: string;
+  status: TeamInviteStatus;
+  created_at?: Timestamp;
+  updated_at?: Timestamp;
+}
+
+export const getMyTeam = async (userId: string): Promise<UserTeam | null> => {
+  const docSnap = await getDoc(doc(db, 'user_teams', userId));
+  if (!docSnap.exists()) return null;
+  return { id: docSnap.id, ...docSnap.data() } as UserTeam;
+};
+
+export const saveMyTeam = async (
+  userId: string,
+  teamName: string,
+  leaderData: { name: string; email?: string }
+): Promise<void> => {
+  const teamRef = doc(db, 'user_teams', userId);
+  const snap = await getDoc(teamRef);
+  if (snap.exists()) {
+    await updateDoc(teamRef, {
+      team_name: teamName.trim(),
+      updated_at: serverTimestamp(),
+    });
+  } else {
+    await setDoc(teamRef, {
+      leader_id: userId,
+      leader_name: leaderData.name,
+      leader_email: leaderData.email || '',
+      team_name: teamName.trim(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    });
+  }
+};
+
+export const sendTeamInvite = async (
+  leaderData: { id: string; name: string; email?: string },
+  teamName: string,
+  recipientUser: { id: string; name: string; email?: string; department?: string }
+): Promise<string> => {
+  if (leaderData.id === recipientUser.id) {
+    throw new Error('You cannot invite yourself as a teammate.');
+  }
+
+  // Check if an invite already exists
+  const invitesRef = collection(db, 'team_invitations');
+  const q = query(
+    invitesRef,
+    where('leader_id', '==', leaderData.id),
+    where('recipient_id', '==', recipientUser.id)
+  );
+  const existing = await getDocs(q);
+  if (!existing.empty) {
+    const existingDoc = existing.docs[0].data();
+    if (existingDoc.status === 'pending') {
+      throw new Error('An invitation is already pending for this student.');
+    }
+    if (existingDoc.status === 'accepted') {
+      throw new Error('This student is already in your team.');
+    }
+    // If rejected, update to pending again
+    await updateDoc(existing.docs[0].ref, {
+      status: 'pending',
+      team_name: teamName.trim(),
+      updated_at: serverTimestamp(),
+    });
+    // Send notification
+    await createNotification(
+      recipientUser.id,
+      'Team Invitation',
+      `${leaderData.name} invited you to join their team "${teamName}".`,
+      '/teams'
+    );
+    return existing.docs[0].id;
+  }
+
+  // Save leader's team
+  await saveMyTeam(leaderData.id, teamName, leaderData);
+
+  const docRef = await addDoc(invitesRef, stripUndefined({
+    team_id: leaderData.id,
+    team_name: teamName.trim(),
+    leader_id: leaderData.id,
+    leader_name: leaderData.name,
+    leader_email: leaderData.email || '',
+    recipient_id: recipientUser.id,
+    recipient_name: recipientUser.name,
+    recipient_email: recipientUser.email || '',
+    recipient_department: recipientUser.department || '',
+    status: 'pending' as TeamInviteStatus,
+    created_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  }));
+
+  // Send in-app notification and push notification to the teammate
+  await createNotification(
+    recipientUser.id,
+    'Team Invitation',
+    `${leaderData.name} invited you to join their team "${teamName}". Tap to accept or decline.`,
+    '/teams'
+  );
+  // Call Python backend push notification
+  import('./notificationApi').then(({ notifyTeamInviteAPI }) => {
+    notifyTeamInviteAPI(recipientUser.id, teamName.trim(), leaderData.name).catch(() => {});
+  });
+
+  return docRef.id;
+};
+
+export const respondToTeamInvite = async (
+  inviteId: string,
+  status: 'accepted' | 'rejected'
+): Promise<void> => {
+  const inviteRef = doc(db, 'team_invitations', inviteId);
+  const snap = await getDoc(inviteRef);
+  if (!snap.exists()) throw new Error('Invitation not found');
+  const data = snap.data();
+
+  await updateDoc(inviteRef, {
+    status,
+    updated_at: serverTimestamp(),
+  });
+
+  // Notify the leader (in-app + push)
+  if (data.leader_id) {
+    const actionText = status === 'accepted' ? 'accepted your team invitation! 🎉' : 'declined your team invitation.';
+    await createNotification(
+      data.leader_id,
+      status === 'accepted' ? 'Teammate Accepted' : 'Invitation Declined',
+      `${data.recipient_name || 'A student'} has ${actionText}`,
+      '/teams'
+    );
+    import('./notificationApi').then(({ notifyTeamInviteResponseAPI }) => {
+      notifyTeamInviteResponseAPI(data.leader_id, data.recipient_name || 'A teammate', data.team_name || '', status === 'accepted').catch(() => {});
+    });
+  }
+};
+
+export const cancelTeamInvite = async (inviteId: string): Promise<void> => {
+  await deleteDoc(doc(db, 'team_invitations', inviteId));
+};
+
+export const subscribeToTeamInvitesSent = (
+  leaderId: string,
+  callback: (invites: TeamInvitation[]) => void
+) => {
+  const invitesRef = collection(db, 'team_invitations');
+  const q = query(invitesRef, where('leader_id', '==', leaderId));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as TeamInvitation)));
+  });
+};
+
+export const subscribeToIncomingTeamInvites = (
+  recipientId: string,
+  callback: (invites: TeamInvitation[]) => void
+) => {
+  const invitesRef = collection(db, 'team_invitations');
+  const q = query(invitesRef, where('recipient_id', '==', recipientId), where('status', '==', 'pending'));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as TeamInvitation)));
+  });
+};
+
+export const subscribeToTeamsJoined = (
+  recipientId: string,
+  callback: (teams: TeamInvitation[]) => void
+) => {
+  const invitesRef = collection(db, 'team_invitations');
+  const q = query(invitesRef, where('recipient_id', '==', recipientId), where('status', '==', 'accepted'));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map((d) => ({ id: d.id, ...d.data() } as TeamInvitation)));
+  });
+};
+
+// ============================================
+// FCM PUSH NOTIFICATIONS
+// ============================================
+
+import { registerFCMTokenAPI, sendGenericPushNotificationAPI } from './notificationApi';
+
+/**
+ * Request notification permission and register FCM token for the current user.
+ * Call this once after login.
+ */
+export const registerFCMToken = async (userId: string): Promise<void> => {
+  if (!messaging) {
+    console.warn('FCM messaging not available');
+    return;
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.warn('Notification permission denied');
+      return;
+    }
+    const token = await getToken(messaging, {
+      vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+    });
+    if (token) {
+      await updateDoc(doc(db, 'users', userId), { fcmToken: token });
+      await registerFCMTokenAPI(token);
+      console.log('FCM token registered locally & backend:', token);
+    }
+  } catch (err) {
+    console.error('FCM token registration failed:', err);
+  }
+};
+
+/**
+ * Listen to foreground FCM messages (when the app is open).
+ */
+export const listenToFCMMessages = (callback: (payload: any) => void) => {
+  if (!messaging) return () => {};
+  return onMessage(messaging, (payload) => {
+    console.log('Foreground FCM message:', payload);
+    callback(payload);
+  });
+};
+
+/**
+ * Send a push notification via FCM to a user via the Python Backend.
+ */
+const sendPushNotification = async (
+  recipientId: string,
+  title: string,
+  body: string
+): Promise<void> => {
+  try {
+    await sendGenericPushNotificationAPI([recipientId], title, body);
+  } catch (err) {
+    console.error('Failed to send push notification:', err);
+  }
+};
+
+export { auth, db, messaging };

@@ -68,7 +68,7 @@ export const NotificationBell: React.FC = () => {
             {unreadCount > 0 && (
               <button
                 onClick={() => user && markAllNotificationsRead(user.uid)}
-                className="text-[12px] font-semibold text-[#6C63FF] hover:underline"
+                className="text-[12px] font-semibold text-[#3B9EFF] hover:underline"
               >
                 Mark all read
               </button>
@@ -83,10 +83,10 @@ export const NotificationBell: React.FC = () => {
                 <button
                   key={n.id}
                   onClick={() => handleClick(n)}
-                  className={`w-full text-left px-4 py-3 hover:bg-black/5 transition-colors ${!n.read ? 'bg-[#6C63FF]/5' : ''}`}
+                  className={`w-full text-left px-4 py-3 hover:bg-black/5 transition-colors ${!n.read ? 'bg-[#3B9EFF]/5' : ''}`}
                 >
                   <div className="flex items-start gap-2">
-                    {!n.read && <span className="w-2 h-2 rounded-full bg-[#6C63FF] mt-1.5 shrink-0" />}
+                    {!n.read && <span className="w-2 h-2 rounded-full bg-[#3B9EFF] mt-1.5 shrink-0" />}
                     <div className={!n.read ? '' : 'pl-4'}>
                       <p className="text-[13px] font-bold text-[#1D1D1F]">{n.title}</p>
                       <p className="text-[12px] text-[#5E6C84] mt-0.5">{n.message}</p>

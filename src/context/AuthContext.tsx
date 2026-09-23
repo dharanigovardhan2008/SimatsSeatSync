@@ -1,7 +1,7 @@
 // Authentication Context Provider
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { type User } from 'firebase/auth';
-import { onAuthChange, getUserDocument, logout as firebaseLogout, createOrUpdateUserDocument, ADMIN_EMAIL } from '@/lib/firebase';
+import { onAuthChange, getUserDocument, logout as firebaseLogout, createOrUpdateUserDocument, ADMIN_EMAIL, registerFCMToken } from '@/lib/firebase';
 import type { UserRole } from '@/lib/firebase';
 // User data interface matching Firestore structure
 
@@ -47,19 +47,40 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [userData, setUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Function to fetch user data from Firestore
-  const fetchUserData = async (uid: string, email: string) => {
+  // Function to fetch user data from Firestore and ensure doc exists
+  const fetchUserData = async (uid: string, email: string, displayName?: string | null) => {
     try {
       let data = await getUserDocument(uid);
-      
-      // If user document exists, check if we need to update role for admin email
+      const cleanEmail = email.trim().toLowerCase();
+
+      // If user document does NOT exist in Firestore (e.g. direct Google sign-in), automatically create it!
+      if (!data && cleanEmail) {
+        data = await createOrUpdateUserDocument(uid, cleanEmail, {
+          name: displayName || 'Student',
+          role: cleanEmail === ADMIN_EMAIL.trim().toLowerCase() ? 'admin' : 'student',
+        });
+      }
+
       if (data) {
         const existingData = data as UserData;
-        if (email === ADMIN_EMAIL && existingData.role !== 'admin') {
-          // Update role to admin
-          data = await createOrUpdateUserDocument(uid, email, { name: existingData.name });
+        const isAdminUser = cleanEmail === ADMIN_EMAIL.trim().toLowerCase();
+
+        // Ensure email field in Firestore document is up to date
+        if (cleanEmail && (!existingData.email || existingData.email.toLowerCase() !== cleanEmail)) {
+          await createOrUpdateUserDocument(uid, cleanEmail, { name: existingData.name });
+          existingData.email = cleanEmail;
         }
-        setUserData({ ...existingData, role: email === ADMIN_EMAIL ? 'admin' : existingData.role });
+
+        if (isAdminUser && existingData.role !== 'admin') {
+          await createOrUpdateUserDocument(uid, cleanEmail, { name: existingData.name });
+          existingData.role = 'admin';
+        }
+
+        setUserData({
+          ...existingData,
+          email: cleanEmail || existingData.email,
+          role: isAdminUser ? 'admin' : existingData.role,
+        });
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -69,7 +90,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Refresh user data function
   const refreshUserData = async () => {
     if (user) {
-      await fetchUserData(user.uid, user.email || '');
+      await fetchUserData(user.uid, user.email || '', user.displayName);
     }
   };
 
@@ -84,13 +105,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const unsubscribe = onAuthChange(async (firebaseUser) => {
       setUser(firebaseUser);
-      
+
       if (firebaseUser) {
-        await fetchUserData(firebaseUser.uid, firebaseUser.email || '');
+        await fetchUserData(firebaseUser.uid, firebaseUser.email || '', firebaseUser.displayName);
+        // Register FCM token for push notifications
+        await registerFCMToken(firebaseUser.uid);
       } else {
         setUserData(null);
       }
-      
+
       setLoading(false);
     });
 

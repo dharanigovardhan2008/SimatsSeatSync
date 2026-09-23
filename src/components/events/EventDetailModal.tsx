@@ -280,7 +280,7 @@ export const EventDetail: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="font-extrabold text-[16px] text-[#1D1D1F]">{speaker.name}</h4>
-                      <p className="text-xs text-[#6C63FF] font-bold">{speaker.title}</p>
+                      <p className="text-xs text-[#3B9EFF] font-bold">{speaker.title}</p>
                       <p className="text-xs text-[#5E6C84] font-medium mt-1 line-clamp-2">{speaker.bio}</p>
                     </div>
                   </div>

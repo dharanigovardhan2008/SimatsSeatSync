@@ -66,7 +66,7 @@ export const TeamTickets: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <TicketIcon size={20} className="text-[#6C63FF]" />
+              <TicketIcon size={20} className="text-[#3B9EFF]" />
             </Link>
           ))}
         </div>

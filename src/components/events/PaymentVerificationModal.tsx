@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { getPendingPayments, verifyPayment, rejectPayment, createNotification } from '@/lib/firebase';
+import { notifyPaymentStatusAPI } from '@/lib/notificationApi';
 import type { DocumentData } from 'firebase/firestore';
 
 interface PaymentVerificationModalProps {
@@ -79,14 +80,15 @@ export const PaymentVerificationModal: React.FC<PaymentVerificationModalProps> =
     setError('');
     try {
       await Promise.all(group.members.map((m) => verifyPayment(m.id)));
-      await Promise.all(uniqueRecipients(group.members).map((uid) =>
-        createNotification(
+      await Promise.all(uniqueRecipients(group.members).map(async (uid) => {
+        await createNotification(
           uid,
           'Payment Verified',
           `Your payment has been verified — check your ticket for ${eventTitle}.`,
           '/tickets'
-        )
-      ));
+        );
+        await notifyPaymentStatusAPI(uid, eventTitle, group.leader.payment_amount || 0, 'approved');
+      }));
       setPending((prev) => prev.filter((r) => !group.members.some((m) => m.id === r.id)));
     } catch {
       setError('Could not mark this as verified. Please try again.');
@@ -101,16 +103,17 @@ export const PaymentVerificationModal: React.FC<PaymentVerificationModalProps> =
     setError('');
     try {
       await Promise.all(group.members.map((m) => rejectPayment(m.id, reason)));
-      await Promise.all(uniqueRecipients(group.members).map((uid) =>
-        createNotification(
+      await Promise.all(uniqueRecipients(group.members).map(async (uid) => {
+        await createNotification(
           uid,
           'Payment Could Not Be Verified',
           reason
             ? `Your payment for ${eventTitle} was rejected: ${reason}`
             : `Your payment for ${eventTitle} could not be verified. Contact the coordinator.`,
           '/tickets'
-        )
-      ));
+        );
+        await notifyPaymentStatusAPI(uid, eventTitle, group.leader.payment_amount || 0, 'rejected', reason);
+      }));
       setPending((prev) => prev.filter((r) => !group.members.some((m) => m.id === r.id)));
     } catch {
       setError('Could not reject this payment. Please try again.');

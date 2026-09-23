@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { getEventById, markAttendance, logRegistrationToSheet } from '@/lib/firebase';
 import type { DocumentData } from 'firebase/firestore';
 
@@ -145,11 +146,7 @@ export const ScanQR: React.FC = () => {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-14 h-14 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -173,8 +170,8 @@ export const ScanQR: React.FC = () => {
 
             {!scanning && (
               <div className="text-center py-10 px-4">
-                <div className="w-16 h-16 rounded-full bg-[#6C63FF]/10 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-[#6C63FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-16 h-16 rounded-full bg-[#3B9EFF]/10 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-[#3B9EFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                   </svg>
                 </div>

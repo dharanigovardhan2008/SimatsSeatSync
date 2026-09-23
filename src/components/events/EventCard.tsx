@@ -52,7 +52,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event }) => {
         <div className="flex justify-between items-start gap-3">
           <div className="flex-1 min-w-0">
             {event.type && (
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#6C63FF]/10 text-[#6C63FF] mb-1.5 uppercase">
+              <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-[#3B9EFF]/10 text-[#3B9EFF] mb-1.5 uppercase">
                 {event.type}
               </span>
             )}

@@ -215,9 +215,9 @@ export const EnrollStatusOverlay: React.FC<EnrollStatusOverlayProps> = ({
             </>
           ) : (
             <>
-              <span className="absolute w-20 h-20 rounded-full bg-[#6C63FF]/20 es-breathe" />
-              <span className="absolute w-20 h-20 rounded-full border-[3px] border-[#6C63FF]/20 border-t-[#6C63FF] es-spin" />
-              <span className="absolute w-14 h-14 rounded-full border-[3px] border-transparent border-b-[#8B84FF] es-spin-r" />
+              <span className="absolute w-20 h-20 rounded-full bg-[#3B9EFF]/20 es-breathe" />
+              <span className="absolute w-20 h-20 rounded-full border-[3px] border-[#3B9EFF]/20 border-t-[#3B9EFF] es-spin" />
+              <span className="absolute w-14 h-14 rounded-full border-[3px] border-transparent border-b-[#007AFF] es-spin-r" />
             </>
           )}
         </div>

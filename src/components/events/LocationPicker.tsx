@@ -119,7 +119,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange 
                 onClick={() => pickSuggestion(s)}
                 className="w-full text-left px-4 py-3 text-sm text-[#3D4852] hover:bg-[#F0F2F6] border-b border-[#F0F2F6] last:border-0 flex items-start gap-2"
               >
-                <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#6C63FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#3B9EFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>

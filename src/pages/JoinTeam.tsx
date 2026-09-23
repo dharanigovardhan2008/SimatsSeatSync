@@ -105,7 +105,7 @@ export const JoinTeam: React.FC = () => {
   return (
     <div className="min-h-screen bg-transparent flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <div className="bg-white/85 backdrop-blur-2xl rounded-[36px] p-8 sm:p-10 shadow-[0_20px_60px_rgba(0,100,200,0.1)] border border-white max-w-md w-full">
-        <p className="text-[12px] font-black text-[#6C63FF] uppercase tracking-wide mb-2">Team Invite</p>
+        <p className="text-[12px] font-black text-[#3B9EFF] uppercase tracking-wide mb-2">Team Invite</p>
         <h1 className="text-[24px] font-extrabold text-[#1D1D1F] tracking-tight mb-1">{event.title}</h1>
         <p className="text-[#5E6C84] font-medium mb-6">
           {team.leader_name} invited you to join team <strong>{team.team_name}</strong>

@@ -18,13 +18,11 @@ import { EventDetail } from '@/pages/EventDetail';
 import { Ticket } from '@/pages/Ticket';
 import { MyTickets } from '@/pages/MyTickets';
 import { TeamTickets } from '@/pages/TeamTickets';
-import { CloudShader } from '@/components/ui/cloud-shader';
+import { Teams } from '@/pages/Teams';
+import { NotFound } from '@/pages/NotFound';
+import { CloudBackground } from '@/components/ui/CloudBackground';
 
-const LoadingScreen = () => (
-  <div className="min-h-screen bg-transparent flex items-center justify-center">
-    <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin"></div>
-  </div>
-);
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 const StudentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userData, loading } = useAuth();
@@ -63,11 +61,7 @@ const AuthedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const RootRoute: React.FC = () => {
   const { user, userData, loading } = useAuth();
   if (loading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-14 h-14 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <LoadingScreen />;
   }
   if (user && userData) {
     if (userData.role === 'admin') return <Navigate to="/admin" replace />;
@@ -88,6 +82,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/ticket/:registrationId" element={<AuthedRoute><Ticket /></AuthedRoute>} />
       <Route path="/tickets" element={<AuthedRoute><MyTickets /></AuthedRoute>} />
       <Route path="/team-tickets/:teamId" element={<AuthedRoute><TeamTickets /></AuthedRoute>} />
+      <Route path="/teams" element={<AuthedRoute><Teams /></AuthedRoute>} />
 
       <Route path="/student" element={<StudentRoute><StudentDashboard /></StudentRoute>} />
 
@@ -105,7 +100,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/join-team/:teamId" element={<JoinTeam />} />
       <Route path="/payments/:eventId" element={<AuthedRoute><PaymentVerificationPage /></AuthedRoute>} />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };
@@ -115,8 +110,9 @@ export function App() {
     <Router>
       <AuthProvider>
         <div className="relative min-h-screen w-full">
+          {/* Fixed background layer - mobile-optimized to prevent flickering */}
           <div className="fixed inset-0 -z-10 pointer-events-none">
-            <CloudShader speed={0.8} count={6} />
+            <CloudBackground speed={0.8} count={6} />
           </div>
           <div className="relative z-0">
             <AppRoutes />

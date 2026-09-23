@@ -40,7 +40,7 @@ const Toggle: React.FC<{ checked: boolean; onChange: (v: boolean) => void; label
         onChange={(e) => onChange(e.target.checked)}
         className="sr-only peer"
       />
-      <div className="w-11 h-6 bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C63FF]"></div>
+      <div className="w-11 h-6 bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#3B9EFF]"></div>
     </label>
     <span className="text-[#3D4852] font-medium">{label}</span>
     {hint && <span className="text-sm text-[#6B7280]">{hint}</span>}
@@ -367,7 +367,7 @@ export const CoordinatorEventForm: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setExtraPhones((p) => [...p, ''])}
-                  className="text-sm font-semibold text-[#6C63FF] hover:underline"
+                  className="text-sm font-semibold text-[#3B9EFF] hover:underline"
                 >
                   + Add number
                 </button>
@@ -474,7 +474,7 @@ export const CoordinatorEventForm: React.FC = () => {
                       type="checkbox"
                       checked={unlimitedSeats}
                       onChange={(e) => setUnlimitedSeats(e.target.checked)}
-                      className="w-4 h-4 rounded accent-[#6C63FF]"
+                      className="w-4 h-4 rounded accent-[#3B9EFF]"
                     />
                     Unlimited seats
                   </label>
@@ -729,7 +729,7 @@ export const CoordinatorEventForm: React.FC = () => {
                     onClick={() => toggleBranch(d.value)}
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                       targetBranches.includes(d.value)
-                        ? 'bg-[#6C63FF] text-white'
+                        ? 'bg-[#3B9EFF] text-white'
                         : 'bg-white/50 backdrop-blur-md text-[#3D4852] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
                     }`}
                   >

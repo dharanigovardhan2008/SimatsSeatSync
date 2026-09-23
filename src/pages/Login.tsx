@@ -1,4 +1,4 @@
-// Login Page Component
+// Login Page Component - Premium Redesign
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -6,16 +6,18 @@ import { loginWithEmail, loginWithGoogle, getUserDocument, logout as firebaseLog
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import { Eye, EyeOff, ArrowRight, Sparkles } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, userData, loading: authLoading } = useAuth();
   const [searchParams] = useSearchParams();
-  // Present when arriving via a team invite link.
   const redirectTo = searchParams.get('redirect') || '';
 
   // Redirect if already logged in
@@ -36,14 +38,13 @@ export const Login: React.FC = () => {
     try {
       const result = await loginWithEmail(email, password);
       const userEmail = result.user.email || '';
-      
-      // Use createOrUpdateUserDocument which handles admin email check
+
       const userDoc = await createOrUpdateUserDocument(
         result.user.uid,
         userEmail,
         { name: result.user.displayName || 'User' }
       );
-      
+
       if (redirectTo) navigate(redirectTo);
       else if (userDoc.role === 'admin') navigate('/admin');
       else if (userDoc.role === 'coordinator') navigate('/coordinator');
@@ -71,23 +72,20 @@ export const Login: React.FC = () => {
       const result = await loginWithGoogle();
       const userEmail = result.user.email || '';
       const userDoc = await getUserDocument(result.user.uid);
-      
+
       if (userDoc) {
-        // Use createOrUpdateUserDocument to handle admin email check
         const updatedDoc = await createOrUpdateUserDocument(
           result.user.uid,
           userEmail,
           { name: result.user.displayName || 'User' }
         );
-        
+
         if (redirectTo) navigate(redirectTo);
         else if (updatedDoc.role === 'admin') navigate('/admin');
         else if (updatedDoc.role === 'coordinator') navigate('/coordinator');
         else navigate('/student');
       } else {
-        // User doesn't exist, redirect to register with prefilled Google data
         const googleName = result.user.displayName || '';
-        // Sign out since we need them to complete registration
         await firebaseLogout();
         navigate(`/register?email=${encodeURIComponent(userEmail)}&name=${encodeURIComponent(googleName)}&google=true${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ''}`);
       }
@@ -100,77 +98,106 @@ export const Login: React.FC = () => {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
-    <div className="min-h-screen bg-transparent py-12 px-4">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <Link to="/" className="inline-flex items-center gap-3 mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shadow-[9px_9px_16px_rgb(163,177,198,0.6),-9px_-9px_16px_rgba(255,255,255,0.5)]">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
+    <div className="min-h-screen bg-transparent py-8 sm:py-12 px-4 flex items-center justify-center">
+      <div className="max-w-md w-full">
+        {/* Premium Header */}
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center justify-center gap-2.5 mb-6 group">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3B9EFF] to-[#007AFF] flex items-center justify-center shadow-[0_8px_24px_rgba(59,158,255,0.25)] group-hover:shadow-[0_12px_32px_rgba(59,158,255,0.35)] transition-all group-hover:scale-105 group-active:scale-95">
+              <Sparkles className="w-7 h-7 text-white" strokeWidth={2} />
             </div>
           </Link>
-          <h1 className="font-display font-extrabold text-4xl text-[#3D4852] tracking-tight">
+          <h1 className="font-extrabold text-[32px] sm:text-[40px] text-[#1D1D1F] tracking-tight leading-tight mb-3">
             Welcome Back
           </h1>
-          <p className="mt-3 text-[#6B7280]">
+          <p className="text-[15px] text-[#5E6C84] font-medium">
             Sign in to access your SIMATS SeatSync account
           </p>
         </div>
 
         {/* Login Card */}
-        <Card className="p-10">
-          <form onSubmit={handleEmailLogin} className="space-y-6">
+        <Card className="p-8 sm:p-10 backdrop-blur-2xl bg-white/85 border-white shadow-[0_20px_60px_rgba(0,100,200,0.12)]">
+          <form onSubmit={handleEmailLogin} className="space-y-5">
             {error && (
-              <div className="p-4 rounded-2xl bg-red-50 text-red-600 text-sm shadow-[inset_3px_3px_6px_rgba(255,100,100,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]">
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-100 text-red-600 text-[14px] font-semibold animate-[slideDown_0.3s_ease-out]">
+                <style>{`
+                  @keyframes slideDown {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                  }
+                `}</style>
                 {error}
               </div>
             )}
 
-            <Input
-              label="Email Address"
-              type="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <div className="space-y-1">
+              <label htmlFor="email" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                Email Address
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="transition-all duration-200 focus:ring-2 focus:ring-[#3B9EFF]/20"
+              />
+            </div>
 
-            <Input
-              label="Password"
-              type="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div className="space-y-1">
+              <label htmlFor="password" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="pr-12 transition-all duration-200 focus:ring-2 focus:ring-[#3B9EFF]/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-black/5 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff size={18} className="text-[#5E6C84]" />
+                  ) : (
+                    <Eye size={18} className="text-[#5E6C84]" />
+                  )}
+                </button>
+              </div>
+            </div>
 
             <Button
               type="submit"
               variant="primary"
-              className="w-full"
+              className="w-full mt-6 group"
               isLoading={loading}
             >
-              Sign In
+              <span className="flex items-center justify-center gap-2">
+                Sign In
+                <ArrowRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
+              </span>
             </Button>
           </form>
 
           {/* Divider */}
-          <div className="relative my-8">
+          <div className="relative my-7">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full h-[2px] bg-white/50 backdrop-blur-md shadow-[inset_1px_1px_2px_rgb(163,177,198,0.6),inset_-1px_-1px_2px_rgba(255,255,255,0.5)]"></div>
+              <div className="w-full h-px bg-gradient-to-r from-transparent via-black/10 to-transparent"></div>
             </div>
             <div className="relative flex justify-center">
-              <span className="px-4 bg-white/50 backdrop-blur-md text-[#6B7280] text-sm">or continue with</span>
+              <span className="px-4 bg-white/90 text-[#86868B] text-[13px] font-bold uppercase tracking-wide">or</span>
             </div>
           </div>
 
@@ -178,7 +205,7 @@ export const Login: React.FC = () => {
           <Button
             type="button"
             variant="secondary"
-            className="w-full flex items-center justify-center gap-3"
+            className="w-full flex items-center justify-center gap-3 hover:border-[#3B9EFF]/30 transition-all"
             onClick={handleGoogleLogin}
             disabled={loading}
           >
@@ -204,13 +231,23 @@ export const Login: React.FC = () => {
           </Button>
 
           {/* Register Link */}
-          <p className="mt-8 text-center text-[#6B7280]">
+          <p className="mt-7 text-center text-[14px] text-[#5E6C84]">
             Don't have an account?{' '}
-            <Link to={redirectTo ? `/register?redirect=${encodeURIComponent(redirectTo)}` : "/register"} className="text-[#6C63FF] font-medium hover:underline">
-              Register here
+            <Link
+              to={redirectTo ? `/register?redirect=${encodeURIComponent(redirectTo)}` : "/register"}
+              className="text-[#3B9EFF] font-bold hover:text-[#007AFF] transition-colors underline-offset-2 hover:underline"
+            >
+              Create one
             </Link>
           </p>
         </Card>
+
+        {/* Trust Badge */}
+        <div className="mt-6 text-center">
+          <p className="text-[12px] text-[#86868B] font-medium">
+            Secured by SIMATS Engineering College
+          </p>
+        </div>
       </div>
     </div>
   );

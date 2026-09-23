@@ -1,19 +1,21 @@
-// Register Page Component
+// Register Page Component - Premium Redesign
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  registerWithEmail, 
-  loginWithGoogle, 
-  createUserDocument, 
+import {
+  registerWithEmail,
+  loginWithGoogle,
+  createUserDocument,
   checkRegNoExists,
   getUserDocument,
-  ADMIN_EMAIL 
+  ADMIN_EMAIL
 } from '@/lib/firebase';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import { Eye, EyeOff, UserCircle, Briefcase, GraduationCap, ArrowRight, Sparkles } from 'lucide-react';
 
 const DEPARTMENTS = [
   { value: '', label: 'Select Department' },
@@ -31,8 +33,8 @@ const DEPARTMENTS = [
 ];
 
 const ROLES = [
-  { value: 'student', label: 'Student' },
-  { value: 'coordinator', label: 'Event Coordinator' }
+  { value: 'student', label: 'Student', icon: GraduationCap, description: 'Browse events and book your seat' },
+  { value: 'coordinator', label: 'Event Coordinator', icon: Briefcase, description: 'Create and manage events' }
 ];
 
 export const Register: React.FC = () => {
@@ -40,10 +42,8 @@ export const Register: React.FC = () => {
   const isGoogleRedirect = searchParams.get('google') === 'true';
   const prefilledEmail = searchParams.get('email') || '';
   const prefilledName = searchParams.get('name') || '';
-  // Present when arriving via a team invite link, so a fresh signup lands
-  // back on the join-team page instead of the default dashboard.
   const redirectTo = searchParams.get('redirect') || '';
-  
+
   const [formData, setFormData] = useState({
     name: prefilledName,
     email: prefilledEmail,
@@ -53,15 +53,14 @@ export const Register: React.FC = () => {
     department: '',
     role: 'student' as 'student' | 'coordinator'
   });
-  // Step 1 of signup is picking a role; the rest of the form only appears
-  // once that's chosen, because the required fields differ per role.
   const [roleChosen, setRoleChosen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, userData, loading: authLoading } = useAuth();
 
-  // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user && userData) {
       if (redirectTo) navigate(redirectTo);
@@ -117,7 +116,6 @@ export const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      // Check if register number already exists
       if (formData.role === 'student') {
         const regNoExists = await checkRegNoExists(formData.regNo);
         if (regNoExists) {
@@ -127,13 +125,9 @@ export const Register: React.FC = () => {
         }
       }
 
-      // Create auth user
       const result = await registerWithEmail(formData.email, formData.password);
-
-      // Determine role - admin email always wins, otherwise use the picked role
       const role = formData.email === ADMIN_EMAIL ? 'admin' : formData.role;
 
-      // Create user document in Firestore
       await createUserDocument(result.user.uid, {
         name: formData.name,
         reg_no: formData.role === 'student' ? formData.regNo : '',
@@ -142,7 +136,6 @@ export const Register: React.FC = () => {
         email: formData.email
       });
 
-      // Navigate based on role, unless we arrived via an invite link
       if (redirectTo) navigate(redirectTo);
       else if (role === 'admin') navigate('/admin');
       else if (role === 'coordinator') navigate('/coordinator');
@@ -167,31 +160,25 @@ export const Register: React.FC = () => {
     try {
       const result = await loginWithGoogle();
       const userDoc = await getUserDocument(result.user.uid);
-      
+
       if (userDoc) {
-        // User already exists, redirect based on role (or back to the
-        // invite link that brought them here, if any)
         const existingUser = userDoc as { id: string; role: string };
         if (redirectTo) navigate(redirectTo);
         else if (existingUser.role === 'admin') navigate('/admin');
         else if (existingUser.role === 'coordinator') navigate('/coordinator');
         else navigate('/student');
       } else {
-        // Get Google user info and prefill the form
         const googleEmail = result.user.email || '';
         const googleName = result.user.displayName || '';
-        
-        // Sign out since user needs to complete registration form
+
         await import('@/lib/firebase').then(m => m.logout());
-        
-        // Update form with Google data
+
         setFormData(prev => ({
           ...prev,
           name: googleName,
           email: googleEmail
         }));
-        
-        // Update URL to show google redirect state
+
         navigate(`/register?email=${encodeURIComponent(googleEmail)}&name=${encodeURIComponent(googleName)}&google=true${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ''}`, { replace: true });
       }
     } catch (err: unknown) {
@@ -203,44 +190,43 @@ export const Register: React.FC = () => {
   };
 
   if (authLoading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   return (
-    <div className="min-h-screen bg-transparent py-12 px-4">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <Link to="/" className="inline-flex items-center gap-3 mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shadow-[9px_9px_16px_rgb(163,177,198,0.6),-9px_-9px_16px_rgba(255,255,255,0.5)]">
-              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
+    <div className="min-h-screen bg-transparent py-8 sm:py-12 px-4 flex items-center justify-center">
+      <div className="max-w-md w-full">
+        {/* Premium Header */}
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center justify-center gap-2.5 mb-6 group">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#3B9EFF] to-[#007AFF] flex items-center justify-center shadow-[0_8px_24px_rgba(59,158,255,0.25)] group-hover:shadow-[0_12px_32px_rgba(59,158,255,0.35)] transition-all group-hover:scale-105 group-active:scale-95">
+              <Sparkles className="w-7 h-7 text-white" strokeWidth={2} />
             </div>
           </Link>
-          <h1 className="font-display font-extrabold text-4xl text-[#3D4852] tracking-tight">
+          <h1 className="font-extrabold text-[32px] sm:text-[40px] text-[#1D1D1F] tracking-tight leading-tight mb-3">
             Create Account
           </h1>
-          <p className="mt-3 text-[#6B7280]">
+          <p className="text-[15px] text-[#5E6C84] font-medium">
             Join SIMATS SeatSync and register for workshops
           </p>
         </div>
 
-        {/* Step 1 — pick a role before showing the rest of the form */}
+        {/* Step 1: Choose Role */}
         {!roleChosen ? (
-          <Card className="p-10">
-            <h2 className="font-display font-bold text-xl text-[#3D4852] mb-2 text-center">
-              First, who are you?
-            </h2>
-            <p className="text-sm text-[#6B7280] mb-8 text-center">
-              This decides what details we need from you.
-            </p>
+          <Card className="p-8 backdrop-blur-2xl bg-white/85 border-white shadow-[0_20px_60px_rgba(0,100,200,0.12)]">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-[#3B9EFF]/10 flex items-center justify-center mx-auto mb-3">
+                <UserCircle className="w-6 h-6 text-[#3B9EFF]" strokeWidth={2.5} />
+              </div>
+              <h2 className="font-extrabold text-[22px] text-[#1D1D1F] mb-2 tracking-tight">
+                First, who are you?
+              </h2>
+              <p className="text-[14px] text-[#5E6C84] font-medium">
+                This decides what details we need from you
+              </p>
+            </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {ROLES.map((r) => (
                 <button
                   key={r.value}
@@ -249,206 +235,281 @@ export const Register: React.FC = () => {
                     setFormData((prev) => ({
                       ...prev,
                       role: r.value as 'student' | 'coordinator',
-                      // Clear student-only fields when switching to coordinator
                       regNo: r.value === 'student' ? prev.regNo : '',
                       department: r.value === 'student' ? prev.department : '',
                     }));
                     setError('');
                     setRoleChosen(true);
                   }}
-                  className="w-full p-6 rounded-3xl bg-white/50 backdrop-blur-md shadow-[6px_6px_12px_rgb(163,177,198,0.6),-6px_-6px_12px_rgba(255,255,255,0.7)] hover:shadow-[inset_4px_4px_8px_rgb(163,177,198,0.6),inset_-4px_-4px_8px_rgba(255,255,255,0.7)] transition-all text-left group"
+                  className="w-full p-5 rounded-2xl bg-white/70 hover:bg-white border-2 border-white hover:border-[#3B9EFF]/30 shadow-sm hover:shadow-md transition-all text-left group active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shrink-0">
-                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {r.value === 'student' ? (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                        ) : (
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        )}
-                      </svg>
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3B9EFF] to-[#007AFF] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                      <r.icon className="w-6 h-6 text-white" strokeWidth={2} />
                     </div>
-                    <div>
-                      <p className="font-bold text-[#3D4852] text-lg">{r.label}</p>
-                      <p className="text-sm text-[#6B7280]">
-                        {r.value === 'student'
-                          ? 'Browse events and book your seat'
-                          : 'Create and manage events'}
-                      </p>
+                    <div className="flex-1">
+                      <p className="font-extrabold text-[16px] text-[#1D1D1F] mb-0.5">{r.label}</p>
+                      <p className="text-[13px] text-[#5E6C84] font-medium">{r.description}</p>
                     </div>
+                    <ArrowRight className="w-5 h-5 text-[#3B9EFF] opacity-0 group-hover:opacity-100 transition-opacity" strokeWidth={2.5} />
                   </div>
                 </button>
               ))}
             </div>
 
-            <p className="mt-8 text-center text-sm text-[#6B7280]">
+            <p className="mt-7 text-center text-[14px] text-[#5E6C84]">
               Already have an account?{' '}
-              <Link to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="font-semibold text-[#6C63FF] hover:underline">
+              <Link
+                to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"}
+                className="text-[#3B9EFF] font-bold hover:text-[#007AFF] transition-colors underline-offset-2 hover:underline"
+              >
                 Sign in
               </Link>
             </p>
           </Card>
         ) : (
-        <Card className="p-10">
-          <div className="flex items-center justify-between mb-6 pb-5 border-b border-[#D1D9E6]">
-            <div>
-              <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">Signing up as</p>
-              <p className="font-bold text-[#3D4852] text-lg">
-                {ROLES.find((r) => r.value === formData.role)?.label}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setRoleChosen(false); setError(''); }}
-              className="text-sm font-semibold text-[#6C63FF] hover:underline"
-            >
-              Change
-            </button>
-          </div>
-
-          <form onSubmit={handleRegister} className="space-y-5">
-            {isGoogleRedirect && (
-              <div className="p-4 rounded-2xl bg-blue-50 text-blue-700 text-sm shadow-[inset_3px_3px_6px_rgba(100,100,255,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Please complete your registration with your details below.
+          <Card className="p-8 backdrop-blur-2xl bg-white/85 border-white shadow-[0_20px_60px_rgba(0,100,200,0.12)]">
+            {/* Role Badge */}
+            <div className="flex items-center justify-between p-4 mb-6 rounded-2xl bg-gradient-to-r from-[#3B9EFF]/5 to-[#007AFF]/5 border border-[#3B9EFF]/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#3B9EFF] to-[#007AFF] flex items-center justify-center">
+                  {formData.role === 'student' ? (
+                    <GraduationCap className="w-5 h-5 text-white" strokeWidth={2} />
+                  ) : (
+                    <Briefcase className="w-5 h-5 text-white" strokeWidth={2} />
+                  )}
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold text-[#3B9EFF] uppercase tracking-wider">Signing up as</p>
+                  <p className="font-extrabold text-[15px] text-[#1D1D1F]">
+                    {ROLES.find((r) => r.value === formData.role)?.label}
+                  </p>
                 </div>
               </div>
-            )}
-            
-            {error && (
-              <div className="p-4 rounded-2xl bg-red-50 text-red-600 text-sm shadow-[inset_3px_3px_6px_rgba(255,100,100,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]">
-                {error}
-              </div>
-            )}
-
-            <Input
-              label="Full Name"
-              type="text"
-              name="name"
-              placeholder="Enter your full name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-            />
-
-            <Input
-              label="Email Address"
-              type="email"
-              name="email"
-              placeholder="Enter your email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Password"
-                type="password"
-                name="password"
-                placeholder="Create password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-              />
-
-              <Input
-                label="Confirm Password"
-                type="password"
-                name="confirmPassword"
-                placeholder="Confirm password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-              />
+              <button
+                type="button"
+                onClick={() => { setRoleChosen(false); setError(''); }}
+                className="text-[13px] font-bold text-[#3B9EFF] hover:text-[#007AFF] transition-colors px-3 py-1.5 rounded-lg hover:bg-[#3B9EFF]/5"
+              >
+                Change
+              </button>
             </div>
 
-            {/* Students give a register number and department; coordinators
-                have neither, so those fields are skipped entirely. */}
-            {formData.role === 'student' && (
-              <>
+            <form onSubmit={handleRegister} className="space-y-4">
+              {isGoogleRedirect && (
+                <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-700 text-[13px] font-semibold animate-[slideDown_0.3s_ease-out]">
+                  <style>{`
+                    @keyframes slideDown {
+                      from { opacity: 0; transform: translateY(-10px); }
+                      to { opacity: 1; transform: translateY(0); }
+                    }
+                  `}</style>
+                  Please complete your registration with your details below.
+                </div>
+              )}
+
+              {error && (
+                <div className="p-3.5 rounded-xl bg-red-50 border border-red-100 text-red-600 text-[13px] font-semibold animate-[slideDown_0.3s_ease-out]">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="name" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                  Full Name
+                </label>
                 <Input
-                  label="Register Number"
+                  id="name"
                   type="text"
-                  name="regNo"
-                  placeholder="Enter your register number"
-                  value={formData.regNo}
+                  name="name"
+                  placeholder="Enter your full name"
+                  value={formData.name}
                   onChange={handleChange}
                   required
                 />
+              </div>
 
-                <Select
-                  label="Department"
-                  name="department"
-                  value={formData.department}
+              <div>
+                <label htmlFor="email" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                  Email Address
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  name="email"
+                  placeholder="you@example.com"
+                  value={formData.email}
                   onChange={handleChange}
-                  options={DEPARTMENTS}
                   required
                 />
-              </>
-            )}
+              </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="password" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      placeholder="Create password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-black/5 transition-colors"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? (
+                        <EyeOff size={16} className="text-[#5E6C84]" />
+                      ) : (
+                        <Eye size={16} className="text-[#5E6C84]" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                    Confirm
+                  </label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      placeholder="Repeat password"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      required
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg hover:bg-black/5 transition-colors"
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff size={16} className="text-[#5E6C84]" />
+                      ) : (
+                        <Eye size={16} className="text-[#5E6C84]" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {formData.role === 'student' && (
+                <>
+                  <div>
+                    <label htmlFor="regNo" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                      Register Number
+                    </label>
+                    <Input
+                      id="regNo"
+                      type="text"
+                      name="regNo"
+                      placeholder="Enter your register number"
+                      value={formData.regNo}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="department" className="block text-[13px] font-bold text-[#1D1D1F] mb-2">
+                      Department
+                    </label>
+                    <Select
+                      id="department"
+                      name="department"
+                      value={formData.department}
+                      onChange={handleChange}
+                      options={DEPARTMENTS}
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              <Button
+                type="submit"
+                variant="primary"
+                className="w-full mt-2 group"
+                isLoading={loading}
+              >
+                <span className="flex items-center justify-center gap-2">
+                  Create Account
+                  <ArrowRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </Button>
+            </form>
+
+            {/* Divider */}
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full h-px bg-gradient-to-r from-transparent via-black/10 to-transparent"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="px-4 bg-white/90 text-[#86868B] text-[13px] font-bold uppercase tracking-wide">or</span>
+              </div>
+            </div>
+
+            {/* Google Sign Up */}
             <Button
-              type="submit"
-              variant="primary"
-              className="w-full"
-              isLoading={loading}
+              type="button"
+              variant="secondary"
+              className="w-full flex items-center justify-center gap-3 hover:border-[#3B9EFF]/30 transition-all"
+              onClick={handleGoogleSignUp}
+              disabled={loading}
             >
-              Create Account
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                />
+              </svg>
+              Continue with Google
             </Button>
-          </form>
 
-          {/* Divider */}
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full h-[2px] bg-white/50 backdrop-blur-md shadow-[inset_1px_1px_2px_rgb(163,177,198,0.6),inset_-1px_-1px_2px_rgba(255,255,255,0.5)]"></div>
-            </div>
-            <div className="relative flex justify-center">
-              <span className="px-4 bg-white/50 backdrop-blur-md text-[#6B7280] text-sm">or sign up with</span>
-            </div>
-          </div>
-
-          {/* Google Sign Up */}
-          <Button
-            type="button"
-            variant="secondary"
-            className="w-full flex items-center justify-center gap-3"
-            onClick={handleGoogleSignUp}
-            disabled={loading}
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-              />
-            </svg>
-            Continue with Google
-          </Button>
-
-          {/* Login Link */}
-          <p className="mt-8 text-center text-[#6B7280]">
-            Already have an account?{' '}
-            <Link to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="text-[#6C63FF] font-medium hover:underline">
-              Sign in here
-            </Link>
-          </p>
-        </Card>
+            {/* Login Link */}
+            <p className="mt-6 text-center text-[14px] text-[#5E6C84]">
+              Already have an account?{' '}
+              <Link
+                to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"}
+                className="text-[#3B9EFF] font-bold hover:text-[#007AFF] transition-colors underline-offset-2 hover:underline"
+              >
+                Sign in
+              </Link>
+            </p>
+          </Card>
         )}
+
+        {/* Trust Badge */}
+        <div className="mt-6 text-center">
+          <p className="text-[12px] text-[#86868B] font-medium">
+            Secured by SIMATS Engineering College
+          </p>
+        </div>
       </div>
     </div>
   );

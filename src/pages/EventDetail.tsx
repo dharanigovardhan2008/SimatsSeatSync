@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { getEventById, registerForEvent, registerTeamForEvent, isRegistrationClosed, logRegistrationToSheet, createNotification, getTeamByCode, type PaymentProof } from '@/lib/firebase';
+import { notifyPaymentSubmittedAPI, notifyTeamRegisteredAPI } from '@/lib/notificationApi';
 import { PaymentModal } from '@/components/events/PaymentModal';
 import { EventMap } from '@/components/events/EventMap';
 import { TeamEnrollModal } from '@/components/events/TeamEnrollModal';
@@ -96,6 +97,14 @@ export const EventDetail: React.FC = () => {
             `${userData.name} submitted a payment reference for ${event.title}. Tap to review.`,
             `/payments/${eventId}`
           );
+          notifyPaymentSubmittedAPI(
+            eventId,
+            event.title,
+            payment.utr,
+            payment.amount,
+            userData.name,
+            event.coordinator_id
+          );
         }
         setSuccessNext(`/ticket/${result.registrationId}`);
       } else {
@@ -168,7 +177,7 @@ export const EventDetail: React.FC = () => {
     if (!userData || !eventId || !event) return;
     setRegistering(true);
     try {
-      const members = [{ name: userData.name, email: userData.email, reg_no: userData.reg_no, department: userData.department }, ...teammates];
+      const members = [{ name: userData.name, email: userData.email, uid: userData.id, reg_no: userData.reg_no, department: userData.department }, ...teammates.map((t: any) => ({ name: t.name, email: t.email, uid: t.uid || t.id || undefined, reg_no: undefined, department: userData.department }))];
       const result = await registerTeamForEvent(userData.id, eventId, userData.department, teamName, members, payment);
       if (event.sheet_webhook_url) {
         result.registrationIds.forEach((regId, i) => {
@@ -200,6 +209,21 @@ export const EventDetail: React.FC = () => {
           `${teamName} (led by ${userData.name}) submitted a payment reference for ${event.title}. Tap to review.`,
           `/payments/${eventId}`
         );
+        notifyPaymentSubmittedAPI(
+          eventId,
+          event.title,
+          payment.utr,
+          payment.amount,
+          userData.name,
+          event.coordinator_id,
+          teamName
+        );
+      }
+
+      // Notify team members of registration
+      const memberUids = members.map(m => m.uid).filter((uid): uid is string => Boolean(uid));
+      if (memberUids.length > 0) {
+        notifyTeamRegisteredAPI(memberUids, event.title, teamName);
       }
       // Team leaders go to the invite-link screen first so they can share
       // it — the team-tickets list (with everyone who's joined so far) is
@@ -296,7 +320,7 @@ export const EventDetail: React.FC = () => {
               className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-[#6C63FF] to-[#007AFF]"></div>
+            <div className="w-full h-full bg-gradient-to-br from-[#3B9EFF] to-[#007AFF]"></div>
           )}
           
           {/* Top Overlays Container (Fixes Overlap) */}
@@ -373,7 +397,7 @@ export const EventDetail: React.FC = () => {
             <div className="flex flex-wrap gap-3">
               {event.contact_name && (
                 <span className="flex items-center gap-2 bg-[#F9F9FB] px-4 py-2.5 rounded-full border border-black/5 text-[14px] font-bold text-[#1D1D1F]">
-                  <User size={16} className="text-[#6C63FF]" /> {event.contact_name}
+                  <User size={16} className="text-[#3B9EFF]" /> {event.contact_name}
                 </span>
               )}
               {event.contact_phone && (
@@ -381,7 +405,7 @@ export const EventDetail: React.FC = () => {
                   href={`tel:${event.contact_phone}`}
                   className="flex items-center gap-2 bg-[#F9F9FB] px-4 py-2.5 rounded-full border border-black/5 text-[14px] font-bold text-[#1D1D1F] hover:bg-black/5 transition-colors"
                 >
-                  <Phone size={16} className="text-[#6C63FF]" /> {event.contact_phone}
+                  <Phone size={16} className="text-[#3B9EFF]" /> {event.contact_phone}
                 </a>
               )}
             </div>
@@ -401,7 +425,7 @@ export const EventDetail: React.FC = () => {
                   
                   <div className="bg-[#F9F9FB] rounded-[24px] p-4 md:p-5 border border-black/5 hover:border-black/10 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <span className="text-[16px] text-[#1D1D1F] font-bold">{row.title}</span>
-                    <span className="inline-flex w-fit text-[13px] text-[#6C63FF] font-extrabold bg-[#6C63FF]/10 px-4 py-2 rounded-full tracking-wide">
+                    <span className="inline-flex w-fit text-[13px] text-[#3B9EFF] font-extrabold bg-[#3B9EFF]/10 px-4 py-2 rounded-full tracking-wide">
                       {row.time}
                     </span>
                   </div>
@@ -437,13 +461,12 @@ export const EventDetail: React.FC = () => {
         )}
       </div>
 
-      {/* Premium Glassy Sticky Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/70 backdrop-blur-3xl border-t border-white shadow-[0_-10px_50px_rgba(0,100,200,0.08)] py-4 sm:py-5 px-6 z-30 pb-safe">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-          
+      {/* Premium Glassy Sticky Bottom Action Bar (Pill) */}
+      <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30">
+        <div className="flex items-center gap-3 px-5 py-3 rounded-full bg-white/75 backdrop-blur-3xl border border-white/80 shadow-[0_12px_40px_rgba(0,100,200,0.18)]">
           <div className="flex flex-col">
-            <p className="text-[11px] font-black text-[#86868B] uppercase tracking-wider mb-0.5">Starting From</p>
-            <p className="text-[26px] font-black text-[#1D1D1F] leading-none tracking-tight">
+            <p className="text-[10px] font-black text-[#86868B] uppercase tracking-wider mb-0.5">Starting From</p>
+            <p className="text-[22px] font-black text-[#1D1D1F] leading-none tracking-tight">
               {event.registration_fee ? `₹${event.registration_fee}` : 'Free'}
             </p>
           </div>
@@ -452,7 +475,7 @@ export const EventDetail: React.FC = () => {
             <button
               onClick={handleConfirmExternalForm}
               disabled={registering}
-              className="flex-1 max-w-[260px] py-4 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2 bg-[#1D1D1F] hover:bg-black text-white active:scale-95"
+              className="px-6 py-3 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2 bg-[#1D1D1F] hover:bg-black text-white active:scale-95"
             >
               {registering ? 'Confirming…' : "I've submitted the form"}
             </button>
@@ -460,9 +483,9 @@ export const EventDetail: React.FC = () => {
             <button
               onClick={handleEnrollClick}
               disabled={registering || isFull || regClosed}
-              className={`flex-1 max-w-[200px] sm:max-w-[240px] py-4 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2
+              className={`px-6 py-3 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2
                 ${isFull || regClosed
-                  ? 'bg-gray-200 text-[#86868B] shadow-none cursor-not-allowed' 
+                  ? 'bg-gray-200 text-[#86868B] shadow-none cursor-not-allowed'
                   : 'bg-[#1D1D1F] hover:bg-black text-white active:scale-95'
                 }`}
             >
@@ -505,6 +528,7 @@ export const EventDetail: React.FC = () => {
         isOpen={showTeamModal}
         onClose={() => setShowTeamModal(false)}
         leaderName={userData?.name || ''}
+        leaderId={userData?.id || ''}
         maxTeamSize={event.team_size || 4}
         requiresEmail={!!event.requires_email}
         submitting={registering}
