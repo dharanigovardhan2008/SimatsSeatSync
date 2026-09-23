@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { getUserRegistrations, getEventById } from '@/lib/firebase';
 import { downloadCertificate } from '@/lib/certificate';
 import type { DocumentData as FSDocumentData } from 'firebase/firestore';
@@ -86,11 +87,7 @@ export const MyTickets: React.FC = () => {
   }, [user, userData]);
 
   if (authLoading || loading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
-        <div className="w-8 h-8 rounded-full border-2 border-[#1D1D1F] border-t-transparent animate-spin"></div>
-      </div>
-    );
+    return <LoadingScreen message="Loading your tickets..." />;
   }
 
   return (

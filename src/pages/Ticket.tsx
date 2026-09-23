@@ -6,6 +6,8 @@ import { downloadCertificate } from '@/lib/certificate';
 import html2canvas from 'html2canvas';
 import { useAuth } from '@/context/AuthContext';
 import { getRegistrationById, getEventById } from '@/lib/firebase';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import { CompactLoader } from '@/components/ui/CompactLoader';
 import type { DocumentData } from 'firebase/firestore';
 
 export const Ticket: React.FC = () => {
@@ -116,11 +118,7 @@ export const Ticket: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-12 h-12 rounded-full border-4 border-black border-t-transparent animate-spin" />
-      </div>
-    );
+    return <LoadingScreen message="Loading your ticket..." />;
   }
 
   if (!registration || !event) {
@@ -168,7 +166,7 @@ export const Ticket: React.FC = () => {
           aria-label="Download ticket"
         >
           {downloading ? (
-            <div className="w-4 h-4 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" />
+            <CompactLoader size="sm" className="text-gray-400" />
           ) : (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />

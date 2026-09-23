@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { getRegistrationsByTeam, getEventById } from '@/lib/firebase';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import type { DocumentData } from 'firebase/firestore';
 import { ArrowLeft, Ticket as TicketIcon } from 'lucide-react';
 
@@ -26,11 +27,7 @@ export const TeamTickets: React.FC = () => {
   }, [teamId, user]);
 
   if (loading || authLoading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
-        <div className="w-8 h-8 rounded-full border-2 border-[#1D1D1F] border-t-transparent animate-spin"></div>
-      </div>
-    );
+    return <LoadingScreen message="Loading team tickets..." />;
   }
 
   return (

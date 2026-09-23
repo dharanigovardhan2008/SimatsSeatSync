@@ -9,6 +9,8 @@ import { EventMap } from '@/components/events/EventMap';
 import { TeamEnrollModal } from '@/components/events/TeamEnrollModal';
 import { TeamChoiceModal } from '@/components/events/TeamChoiceModal';
 import { EnrollStatusOverlay } from '@/components/ui/EnrollStatusOverlay';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import { CompactLoader } from '@/components/ui/CompactLoader';
 import type { DocumentData } from 'firebase/firestore';
 import { ArrowLeft, MapPin, Calendar, Clock, Info, Navigation, User, Phone } from 'lucide-react';
 
@@ -257,11 +259,7 @@ export const EventDetail: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
-        <div className="w-10 h-10 rounded-full border-[3px] border-[#1D1D1F] border-t-transparent animate-spin" />
-      </div>
-    );
+    return <LoadingScreen message="Loading event details..." />;
   }
 
   if (!event) {
@@ -491,7 +489,7 @@ export const EventDetail: React.FC = () => {
             >
               {registering ? (
                 <span className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded-full border-[2.5px] border-white/30 border-t-white animate-spin" />
+                  <CompactLoader size="xs" className="text-white" />
                   Booking...
                 </span>
               ) : regClosed ? (

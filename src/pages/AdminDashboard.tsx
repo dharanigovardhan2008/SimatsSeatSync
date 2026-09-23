@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
+import { CompactLoader } from '@/components/ui/CompactLoader';
 import {
   subscribeToUsers,
   subscribeToEvents,
@@ -160,7 +161,7 @@ export const AdminDashboard: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
-        <div className="w-8 h-8 rounded-full border-[3px] border-[#1D1D1F] border-t-transparent animate-spin"></div>
+        <CompactLoader size="lg" className="text-[#1D1D1F]" />
       </div>
     );
   }
@@ -652,7 +653,7 @@ export const AdminDashboard: React.FC = () => {
                             }`}
                           >
                             {isBeingUpdated ? (
-                              <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                <CompactLoader size="sm" className="text-current" />
                             ) : isBlocked ? (
                               'Unblock'
                             ) : (

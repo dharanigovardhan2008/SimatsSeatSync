@@ -84,7 +84,7 @@ export const JoinTeam: React.FC = () => {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-[3px] border-[#1D1D1F] border-t-transparent animate-spin" />
+        <CompactLoader size="lg" className="text-[#1D1D1F]" />
       </div>
     );
   }

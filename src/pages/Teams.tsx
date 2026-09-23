@@ -176,7 +176,7 @@ export const Teams: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-transparent flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-[3px] border-[#1D1D1F] border-t-transparent animate-spin" />
+        <CompactLoader size="lg" className="text-[#1D1D1F]" />
       </div>
     );
   }
@@ -397,7 +397,7 @@ export const Teams: React.FC = () => {
                 >
                   {searching ? (
                     <>
-                      <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                      <CompactLoader size="sm" className="text-white" />
                       Sending Request...
                     </>
                   ) : (
