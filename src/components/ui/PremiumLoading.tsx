@@ -6,8 +6,8 @@ interface PremiumLoadingProps {
 }
 
 /**
- * Premium loading animation that matches the success animation design language.
- * Uses orbital rings with gradient and glow effects.
+ * Premium loading animation matching SeatSync's enrolling state.
+ * Reuses the exact animation from EnrollStatusOverlay for consistency.
  * Respects prefers-reduced-motion.
  */
 export const PremiumLoading: React.FC<PremiumLoadingProps> = ({
@@ -35,29 +35,29 @@ export const PremiumLoading: React.FC<PremiumLoadingProps> = ({
   return (
     <div className={`relative ${sizeClasses[size]} flex items-center justify-center ${className}`}>
       <style>{`
-        @keyframes premium-spin {
+        @keyframes es-spin {
           to { transform: rotate(360deg); }
         }
-        @keyframes premium-spin-reverse {
+        @keyframes es-spin-r {
           to { transform: rotate(-360deg); }
         }
-        @keyframes premium-pulse {
-          0%, 100% { opacity: 0.6; transform: scale(1); }
-          50% { opacity: 0.3; transform: scale(1.15); }
+        @keyframes es-breathe {
+          0%,100% { transform: scale(1); opacity:.55 }
+          50%     { transform: scale(1.12); opacity:.25 }
         }
-        .premium-spin {
-          animation: premium-spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        .es-spin {
+          animation: es-spin 1s linear infinite;
         }
-        .premium-spin-reverse {
-          animation: premium-spin-reverse 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        .es-spin-r {
+          animation: es-spin-r 1.5s linear infinite;
         }
-        .premium-pulse {
-          animation: premium-pulse 2s ease-in-out infinite;
+        .es-breathe {
+          animation: es-breathe 1.6s ease-in-out infinite;
         }
         @media (prefers-reduced-motion: reduce) {
-          .premium-spin,
-          .premium-spin-reverse,
-          .premium-pulse {
+          .es-spin,
+          .es-spin-r,
+          .es-breathe {
             animation: none !important;
           }
         }
@@ -65,12 +65,12 @@ export const PremiumLoading: React.FC<PremiumLoadingProps> = ({
 
       {/* Pulsing glow background */}
       <span
-        className={`absolute ${ringClasses[size]} rounded-full bg-gradient-to-br from-[#3B9EFF]/30 to-[#007AFF]/20 premium-pulse`}
+        className={`absolute ${ringClasses[size]} rounded-full bg-[#3B9EFF]/25 es-breathe`}
       />
 
       {/* Outer ring with gradient */}
       <span
-        className={`absolute ${ringClasses[size]} rounded-full border-[3px] border-transparent bg-gradient-to-br from-[#3B9EFF] via-[#007AFF] to-[#3B9EFF] premium-spin`}
+        className={`absolute ${ringClasses[size]} rounded-full border-[3px] border-transparent bg-gradient-to-br from-[#3B9EFF] via-[#007AFF] to-[#3B9EFF] es-spin`}
         style={{
           backgroundClip: 'padding-box',
           WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
@@ -83,7 +83,7 @@ export const PremiumLoading: React.FC<PremiumLoadingProps> = ({
 
       {/* Inner ring with opposite rotation */}
       <span
-        className={`absolute ${innerRingClasses[size]} rounded-full border-[3px] border-transparent bg-gradient-to-tr from-[#007AFF] to-[#3B9EFF] premium-spin-reverse`}
+        className={`absolute ${innerRingClasses[size]} rounded-full border-[3px] border-transparent bg-gradient-to-tr from-[#007AFF] to-[#3B9EFF] es-spin-r`}
         style={{
           backgroundClip: 'padding-box',
           WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
