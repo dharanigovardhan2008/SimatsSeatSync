@@ -234,7 +234,7 @@ export const EventDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
         <div className="w-10 h-10 rounded-full border-[3px] border-[#1D1D1F] border-t-transparent animate-spin" />
       </div>
     );
@@ -242,7 +242,7 @@ export const EventDetail: React.FC = () => {
 
   if (!event) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
         <div className="bg-white/80 backdrop-blur-2xl p-8 rounded-[36px] border border-white shadow-[0_16px_50px_rgba(0,100,200,0.06)] text-center max-w-sm w-full mx-4">
           <div className="w-16 h-16 bg-[#F5F5F7] rounded-full flex items-center justify-center mx-auto mb-4">
             <Info size={24} className="text-[#86868B]" />
@@ -266,7 +266,7 @@ export const EventDetail: React.FC = () => {
   const locateUrl = buildLocateUrl(event);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] font-sans pb-36 flex flex-col items-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+    <div className="min-h-screen bg-transparent font-sans pb-36 flex flex-col items-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       
       {/* Top Floating Nav Bar (Glassy) */}
       <div className="w-full max-w-4xl px-4 sm:px-6 pt-6 pb-4 flex justify-between items-center z-10 sticky top-0">

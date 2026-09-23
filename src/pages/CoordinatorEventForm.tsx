@@ -40,7 +40,7 @@ const Toggle: React.FC<{ checked: boolean; onChange: (v: boolean) => void; label
         onChange={(e) => onChange(e.target.checked)}
         className="sr-only peer"
       />
-      <div className="w-11 h-6 bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C63FF]"></div>
+      <div className="w-11 h-6 bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.6),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#6C63FF]"></div>
     </label>
     <span className="text-[#3D4852] font-medium">{label}</span>
     {hint && <span className="text-sm text-[#6B7280]">{hint}</span>}
@@ -289,7 +289,7 @@ export const CoordinatorEventForm: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#E0E5EC]">
+    <div className="min-h-screen bg-transparent">
       <Navbar />
       <div className="max-w-3xl mx-auto px-4 py-10">
         <h1 className="font-display font-extrabold text-3xl text-[#3D4852] mb-8">
@@ -331,7 +331,7 @@ export const CoordinatorEventForm: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-[#3D4852] mb-2">About</label>
               <textarea
-                className="w-full px-5 py-4 rounded-2xl bg-[#E0E5EC] shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] focus:outline-none"
+                className="w-full px-5 py-4 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] focus:outline-none"
                 rows={4}
                 value={about}
                 onChange={(e) => setAbout(e.target.value)}
@@ -403,7 +403,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── Location ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <Toggle
                 checked={useMap}
                 onChange={setUseMap}
@@ -440,7 +440,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── Registration deadline ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <Toggle
                 checked={customDeadline}
                 onChange={setCustomDeadline}
@@ -501,7 +501,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── Payment ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <Toggle
                 checked={isPaid}
                 onChange={(v) => { setIsPaid(v); if (v && !fee) setFee(0); }}
@@ -536,7 +536,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── Certificate ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[#3D4852] mb-2">
                   Certificate Template (optional)
@@ -582,7 +582,7 @@ export const CoordinatorEventForm: React.FC = () => {
                     <select
                       value={certFont}
                       onChange={(e) => setCertFont(e.target.value)}
-                      className="w-full px-5 py-4 rounded-2xl bg-[#E0E5EC] shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] focus:outline-none"
+                      className="w-full px-5 py-4 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] focus:outline-none"
                       style={{ fontFamily: certFont }}
                     >
                       {CERTIFICATE_FONTS.map((f) => (
@@ -616,7 +616,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── Team-based registration ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <Toggle checked={teamBased} onChange={setTeamBased} label="Team-based registration" />
               {teamBased && (
                 <>
@@ -641,7 +641,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── External Google Form ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <Toggle
                 checked={useExternalForm}
                 onChange={setUseExternalForm}
@@ -664,7 +664,7 @@ export const CoordinatorEventForm: React.FC = () => {
             </div>
 
             {/* ── Google Sheet logging ── */}
-            <div className="p-5 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
+            <div className="p-5 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.4),inset_-3px_-3px_6px_rgba(255,255,255,0.4)] space-y-4">
               <Toggle
                 checked={useSheetLog}
                 onChange={setUseSheetLog}
@@ -730,7 +730,7 @@ export const CoordinatorEventForm: React.FC = () => {
                     className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
                       targetBranches.includes(d.value)
                         ? 'bg-[#6C63FF] text-white'
-                        : 'bg-[#E0E5EC] text-[#3D4852] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
+                        : 'bg-white/50 backdrop-blur-md text-[#3D4852] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]'
                     }`}
                   >
                     {d.label}

@@ -27,14 +27,14 @@ export const TeamTickets: React.FC = () => {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      <div className="min-h-screen bg-transparent flex items-center justify-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
         <div className="w-8 h-8 rounded-full border-2 border-[#1D1D1F] border-t-transparent animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+    <div className="min-h-screen bg-transparent text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 pt-8">
         <button
           onClick={() => navigate('/student')}

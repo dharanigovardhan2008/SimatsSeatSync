@@ -43,7 +43,7 @@ export const Home: React.FC = () => {
     new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+    <div className="min-h-screen bg-transparent text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <Navbar />
 
       {/* Hero Section */}

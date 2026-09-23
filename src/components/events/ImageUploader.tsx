@@ -58,7 +58,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ images, onChange, 
             type="button"
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
-            className="w-24 h-24 rounded-2xl bg-[#E0E5EC] shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] flex items-center justify-center text-[#6C63FF] text-3xl disabled:opacity-50"
+            className="w-24 h-24 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_6px_6px_10px_rgb(163,177,198,0.6),inset_-6px_-6px_10px_rgba(255,255,255,0.5)] flex items-center justify-center text-[#6C63FF] text-3xl disabled:opacity-50"
           >
             {uploading ? '…' : '+'}
           </button>

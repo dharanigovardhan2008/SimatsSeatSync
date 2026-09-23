@@ -57,7 +57,7 @@ export const TeamInvite: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+    <div className="min-h-screen bg-transparent flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <div className="bg-white/85 backdrop-blur-2xl rounded-[36px] p-8 sm:p-10 shadow-[0_20px_60px_rgba(0,100,200,0.1)] border border-white max-w-md w-full text-center">
         <div className="w-16 h-16 rounded-full bg-[#34C759]/15 flex items-center justify-center mx-auto mb-5">
           <Check className="text-[#34C759]" size={28} strokeWidth={3} />

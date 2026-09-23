@@ -18,9 +18,10 @@ import { EventDetail } from '@/pages/EventDetail';
 import { Ticket } from '@/pages/Ticket';
 import { MyTickets } from '@/pages/MyTickets';
 import { TeamTickets } from '@/pages/TeamTickets';
+import { CloudShader } from '@/components/ui/cloud-shader';
 
 const LoadingScreen = () => (
-  <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
+  <div className="min-h-screen bg-transparent flex items-center justify-center">
     <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin"></div>
   </div>
 );
@@ -63,7 +64,7 @@ const RootRoute: React.FC = () => {
   const { user, userData, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-14 h-14 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
       </div>
     );
@@ -113,7 +114,14 @@ export function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+        <div className="relative min-h-screen w-full">
+          <div className="fixed inset-0 -z-10 pointer-events-none">
+            <CloudShader speed={0.8} count={6} />
+          </div>
+          <div className="relative z-0">
+            <AppRoutes />
+          </div>
+        </div>
       </AuthProvider>
     </Router>
   );

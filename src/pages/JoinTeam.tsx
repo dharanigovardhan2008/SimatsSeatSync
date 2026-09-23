@@ -83,7 +83,7 @@ export const JoinTeam: React.FC = () => {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-10 h-10 rounded-full border-[3px] border-[#1D1D1F] border-t-transparent animate-spin" />
       </div>
     );
@@ -91,7 +91,7 @@ export const JoinTeam: React.FC = () => {
 
   if (!team || !event) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      <div className="min-h-screen bg-transparent flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
         <div className="bg-white/85 backdrop-blur-2xl rounded-[32px] p-8 shadow-xl border border-white text-center max-w-sm">
           <p className="text-[#1D1D1F] font-bold mb-2">Invite link not found</p>
           <p className="text-[#5E6C84] text-sm">{error || 'This team may have been removed.'}</p>
@@ -103,7 +103,7 @@ export const JoinTeam: React.FC = () => {
   const isFull = team.member_count >= team.max_size;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
+    <div className="min-h-screen bg-transparent flex items-center justify-center px-4" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <div className="bg-white/85 backdrop-blur-2xl rounded-[36px] p-8 sm:p-10 shadow-[0_20px_60px_rgba(0,100,200,0.1)] border border-white max-w-md w-full">
         <p className="text-[12px] font-black text-[#6C63FF] uppercase tracking-wide mb-2">Team Invite</p>
         <h1 className="text-[24px] font-extrabold text-[#1D1D1F] tracking-tight mb-1">{event.title}</h1>

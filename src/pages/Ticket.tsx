@@ -117,7 +117,7 @@ export const Ticket: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-12 h-12 rounded-full border-4 border-black border-t-transparent animate-spin" />
       </div>
     );
@@ -125,7 +125,7 @@ export const Ticket: React.FC = () => {
 
   if (!registration || !event) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center text-gray-500">
+      <div className="min-h-screen bg-transparent flex items-center justify-center text-gray-500">
         Ticket not found.
       </div>
     );
@@ -133,7 +133,7 @@ export const Ticket: React.FC = () => {
 
   if (registration.status === 'cancelled') {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+      <div className="min-h-screen bg-transparent flex items-center justify-center px-4">
         <div className="text-center max-w-sm">
           <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <svg className="w-7 h-7 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,7 +148,7 @@ export const Ticket: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f4f1ee] via-[#f6ede4] to-[#efd9c8] flex flex-col">
+    <div className="min-h-screen bg-transparent flex flex-col">
       {/* Top nav */}
       <div className="flex items-center justify-between px-5 pt-6 pb-2 max-w-md mx-auto w-full">
         <button

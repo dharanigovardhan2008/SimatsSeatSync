@@ -32,14 +32,14 @@ export const PaymentVerificationPage: React.FC = () => {
 
   if (authLoading || !event) {
     return (
-      <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-14 h-14 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#E0E5EC]">
+    <div className="min-h-screen bg-transparent">
       <Navbar />
       <PaymentVerificationModal
         isOpen={true}

@@ -204,14 +204,14 @@ export const Register: React.FC = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#E0E5EC] py-12 px-4">
+    <div className="min-h-screen bg-transparent py-12 px-4">
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
@@ -256,7 +256,7 @@ export const Register: React.FC = () => {
                     setError('');
                     setRoleChosen(true);
                   }}
-                  className="w-full p-6 rounded-3xl bg-[#E0E5EC] shadow-[6px_6px_12px_rgb(163,177,198,0.6),-6px_-6px_12px_rgba(255,255,255,0.7)] hover:shadow-[inset_4px_4px_8px_rgb(163,177,198,0.6),inset_-4px_-4px_8px_rgba(255,255,255,0.7)] transition-all text-left group"
+                  className="w-full p-6 rounded-3xl bg-white/50 backdrop-blur-md shadow-[6px_6px_12px_rgb(163,177,198,0.6),-6px_-6px_12px_rgba(255,255,255,0.7)] hover:shadow-[inset_4px_4px_8px_rgb(163,177,198,0.6),inset_-4px_-4px_8px_rgba(255,255,255,0.7)] transition-all text-left group"
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shrink-0">
@@ -404,10 +404,10 @@ export const Register: React.FC = () => {
           {/* Divider */}
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full h-[2px] bg-[#E0E5EC] shadow-[inset_1px_1px_2px_rgb(163,177,198,0.6),inset_-1px_-1px_2px_rgba(255,255,255,0.5)]"></div>
+              <div className="w-full h-[2px] bg-white/50 backdrop-blur-md shadow-[inset_1px_1px_2px_rgb(163,177,198,0.6),inset_-1px_-1px_2px_rgba(255,255,255,0.5)]"></div>
             </div>
             <div className="relative flex justify-center">
-              <span className="px-4 bg-[#E0E5EC] text-[#6B7280] text-sm">or sign up with</span>
+              <span className="px-4 bg-white/50 backdrop-blur-md text-[#6B7280] text-sm">or sign up with</span>
             </div>
           </div>
 

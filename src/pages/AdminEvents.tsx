@@ -188,17 +188,17 @@ export const AdminEvents: React.FC = () => {
         )}
 
         <div className="grid grid-cols-3 gap-2 my-4">
-          <div className="p-3 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] text-center">
+          <div className="p-3 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] text-center">
             <p className="text-[11px] text-[#6B7280] font-semibold uppercase tracking-wide">
               {variant === 'completed' ? 'Attended' : 'Enrolled'}
             </p>
             <p className="text-xl font-extrabold text-[#3D4852]">{ev.enrolled_count || 0}</p>
           </div>
-          <div className="p-3 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] text-center">
+          <div className="p-3 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] text-center">
             <p className="text-[11px] text-[#6B7280] font-semibold uppercase tracking-wide">Teams</p>
             <p className="text-xl font-extrabold text-[#3D4852]">{ev.team_count || 0}</p>
           </div>
-          <div className="p-3 rounded-2xl bg-[#E0E5EC] shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] text-center">
+          <div className="p-3 rounded-2xl bg-white/50 backdrop-blur-md shadow-[inset_3px_3px_6px_rgb(163,177,198,0.5),inset_-3px_-3px_6px_rgba(255,255,255,0.5)] text-center">
             <p className="text-[11px] text-[#6B7280] font-semibold uppercase tracking-wide">Seats</p>
             <p className="text-xl font-extrabold text-[#3D4852]">
               {unlimited ? '∞' : `${ev.available_seats ?? 0}/${ev.total_seats}`}
@@ -265,7 +265,7 @@ export const AdminEvents: React.FC = () => {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
+      <div className="min-h-screen bg-transparent flex items-center justify-center">
         <div className="w-16 h-16 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
       </div>
     );
@@ -274,7 +274,7 @@ export const AdminEvents: React.FC = () => {
   const totalAttended = completed.reduce((s, e) => s + (e.enrolled_count || 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#E0E5EC]">
+    <div className="min-h-screen bg-transparent">
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
         <div className="flex flex-wrap justify-between items-center gap-4 mb-8">
