@@ -34,7 +34,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 
-export const ADMIN_EMAIL = 'palerugopi2008@gmail.com';
+export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
 export const DEPARTMENTS = [
   'AIML', 'AIDS', 'CSE', 'CSE(AI)', 'CSE(DS)', 
@@ -50,13 +50,13 @@ export type EventType = string;
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAOOgIBLgcUOzRkbq2Y5i2IKI11eRH7rbk",
-  authDomain: "seatsync-aaa2b.firebaseapp.com",
-  projectId: "seatsync-aaa2b",
-  storageBucket: "seatsync-aaa2b.firebasestorage.app",
-  messagingSenderId: "629714324668",
-  appId: "1:629714324668:web:45f83bd74a5e89804554b9",
-  measurementId: "G-RH3LNR8YEF"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 const app = initializeApp(firebaseConfig);
