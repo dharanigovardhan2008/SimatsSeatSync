@@ -258,7 +258,7 @@ export const CoordinatorDashboard: React.FC = () => {
             {ev.is_paid && (
               <button
                 onClick={() => setVerifyingPayments({ id: ev.id!, title: ev.title })}
-                className="w-full py-2.5 px-3 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[12px] border border-indigo-100 transition-all shadow-sm active:scale-95 text-center"
+                className="w-full py-2.5 px-3 rounded-full bg-[#3B9EFF]/10 hover:bg-[#3B9EFF]/20 text-[#007AFF] font-bold text-[12px] border border-[#3B9EFF]/20 transition-all shadow-sm active:scale-95 text-center"
               >
                 Payment Verification
               </button>
@@ -331,7 +331,7 @@ export const CoordinatorDashboard: React.FC = () => {
                 <p className="text-sm font-semibold opacity-90">Total Revenue</p>
                 <p className="text-3xl font-black mt-2">₹{revenue.totalRevenue.toLocaleString()}</p>
               </div>
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[28px] p-6 shadow-lg text-white">
+              <div className="bg-gradient-to-br from-[#3B9EFF] to-[#007AFF] rounded-[28px] p-6 shadow-lg text-white">
                 <p className="text-sm font-semibold opacity-90">Verified</p>
                 <p className="text-3xl font-black mt-2">₹{revenue.verifiedRevenue.toLocaleString()}</p>
               </div>

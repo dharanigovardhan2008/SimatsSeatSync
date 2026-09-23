@@ -43,7 +43,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ images, onChange, 
       <div className="flex flex-wrap gap-3 mb-3">
         {images.map((url) => (
           <div key={url} className="relative w-24 h-24 rounded-2xl overflow-hidden shadow-[inset_2px_2px_4px_rgba(0,0,0,0.15)]">
-            <img src={url} alt="" className="w-full h-full object-cover" />
+            <img src={url} alt="Event photo preview" className="w-full h-full object-cover" />
             <button
               type="button"
               onClick={() => removeImage(url)}

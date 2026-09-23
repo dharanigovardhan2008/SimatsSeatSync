@@ -181,7 +181,7 @@ export const Ticket: React.FC = () => {
           {/* Hero image */}
           <div className="h-44 bg-gray-900 relative">
             {event.images?.[0] && (
-              <img src={event.images[0]} alt="" crossOrigin="anonymous" className="w-full h-full object-cover opacity-90" />
+              <img src={event.images[0]} alt={event.title} crossOrigin="anonymous" className="w-full h-full object-cover opacity-90" />
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
             <div className="absolute bottom-4 left-5 right-5 text-white font-bold text-xl leading-snug drop-shadow">

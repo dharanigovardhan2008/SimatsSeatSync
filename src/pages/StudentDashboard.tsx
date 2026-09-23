@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
+import { EventCardSkeleton } from '@/components/events/EventCardSkeleton';
 import { EnrollStatusOverlay } from '@/components/ui/EnrollStatusOverlay';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { 
@@ -73,6 +74,8 @@ export const StudentDashboard: React.FC = () => {
   const { user, userData, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventData[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
   const [registeredEvents, setRegisteredEvents] = useState<Set<string>>(new Set());
   const [ticketByEvent, setTicketByEvent] = useState<Map<string, string>>(new Map()); // eventId -> registrationId (or leader's, for "View Ticket")
   const [waitlistedEvents, setWaitlistedEvents] = useState<Map<string, number>>(new Map());
@@ -101,46 +104,34 @@ export const StudentDashboard: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    // One-shot fetch of admin-approved events only. A live listener would
-    // re-read every event document on each change, which burns through the
-    // free Firestore read quota; the event list barely moves in a session.
     let cancelled = false;
-    getApprovedEvents()
-      .then((eventsData: DocumentData[]) => {
+    async function loadEvents() {
+      setLoadingEvents(true);
+      setEventsError(null);
+      try {
+        const eventsData = await getApprovedEvents();
         if (cancelled) return;
-        // Temporary diagnostics: logs exactly why each approved event is
-        // shown or hidden, since "the list is empty" gives no clue which
-        // filter did it. Safe to remove once things are working — just
-        // delete this console.table block and the reason-tracking below.
-        const debugRows: Record<string, unknown>[] = [];
+
         const filteredEvents = (eventsData as EventData[]).filter(event => {
           const hidden = isEventHidden(event);
           const branchOk = !event.target_branches || event.target_branches.length === 0
             || event.target_branches.includes(userData?.department || '');
-          debugRows.push({
-            title: event.title,
-            date: event.date,
-            start_time: event.start_time,
-            end_time: event.end_time,
-            hiddenByTimeRule: hidden,
-            branchMatch: branchOk,
-            target_branches: (event.target_branches || []).join(', ') || '(all)',
-            studentDept: userData?.department,
-            shown: !hidden && branchOk,
-          });
           return !hidden && branchOk;
         });
-        console.log(`Fetched ${eventsData.length} approved event(s), showing ${filteredEvents.length} after filters:`);
-        console.table(debugRows);
+
         setEvents(filteredEvents);
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error('Could not load events:', err);
-        setMessage({
-          type: 'error',
-          text: 'Could not load events. If this keeps happening, check the browser console for a Firestore error.',
-        });
-      });
+        if (!cancelled) {
+          setEventsError('Could not load events. Please try again.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingEvents(false);
+        }
+      }
+    }
+    loadEvents();
     return () => { cancelled = true; };
   }, [userData?.department]);
 
@@ -361,7 +352,18 @@ export const StudentDashboard: React.FC = () => {
               Available Events for {userData?.department}
             </h2>
             
-            {upcomingEvents.length === 0 ? (
+            {loadingEvents ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <EventCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : eventsError ? (
+              <div className="bg-white/70 backdrop-blur-2xl rounded-[32px] p-12 text-center border border-white/90 shadow-[0_8px_30px_rgba(0,100,200,0.06)]">
+                <p className="text-red-500 font-semibold text-[15px] mb-3">{eventsError}</p>
+                <button onClick={() => window.location.reload()} className="px-5 py-2 rounded-full bg-[#1D1D1F] text-white text-[13px] font-bold">Retry</button>
+              </div>
+            ) : upcomingEvents.length === 0 ? (
               <div className="bg-white/70 backdrop-blur-2xl rounded-[32px] p-16 text-center border border-white/90 shadow-[0_8px_30px_rgba(0,100,200,0.06)]">
                 <p className="text-[#5E6C84] font-semibold text-[15px]">No events currently available.</p>
               </div>

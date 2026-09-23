@@ -226,7 +226,7 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="bg-white/80 backdrop-blur-2xl rounded-[28px] p-5 shadow-[0_8px_30px_rgba(0,100,200,0.06)] border border-white flex flex-col sm:flex-row items-start sm:items-center gap-4 transition-transform hover:-translate-y-1 col-span-2 lg:col-span-1">
-            <div className="w-12 h-12 rounded-full bg-purple-500/10 text-purple-600 flex items-center justify-center shrink-0 border border-purple-500/20">
+            <div className="w-12 h-12 rounded-full bg-[#38B2AC]/10 text-[#38B2AC] flex items-center justify-center shrink-0 border border-[#38B2AC]/20">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
             </div>
             <div>
@@ -429,7 +429,7 @@ export const AdminDashboard: React.FC = () => {
                     <p className="text-4xl font-black">₹{revenue.totalRevenue.toLocaleString()}</p>
                   </div>
 
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-[28px] p-6 shadow-lg text-white">
+                  <div className="bg-gradient-to-br from-[#3B9EFF] to-[#007AFF] rounded-[28px] p-6 shadow-lg text-white">
                     <div className="flex items-center gap-3 mb-2">
                       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

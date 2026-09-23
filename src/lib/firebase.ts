@@ -1862,7 +1862,6 @@ export const registerFCMToken = async (userId: string): Promise<void> => {
     if (token) {
       await updateDoc(doc(db, 'users', userId), { fcmToken: token });
       await registerFCMTokenAPI(token);
-      console.log('FCM token registered locally & backend:', token);
     }
   } catch (err) {
     console.error('FCM token registration failed:', err);
@@ -1875,7 +1874,6 @@ export const registerFCMToken = async (userId: string): Promise<void> => {
 export const listenToFCMMessages = (callback: (payload: any) => void) => {
   if (!messaging) return () => {};
   return onMessage(messaging, (payload) => {
-    console.log('Foreground FCM message:', payload);
     callback(payload);
   });
 };

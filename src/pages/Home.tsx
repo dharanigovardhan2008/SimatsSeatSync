@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
 import { getApprovedEvents } from '@/lib/firebase';
-import { PremiumLoading } from '@/components/ui/PremiumLoading';
+import { EventCardSkeleton } from '@/components/events/EventCardSkeleton';
 import type { DocumentData } from 'firebase/firestore';
 
 interface EventData {
@@ -109,8 +109,10 @@ export const Home: React.FC = () => {
           </div>
 
           {loading ? (
-            <div className="flex justify-center py-20">
-              <PremiumLoading size="medium" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[...Array(3)].map((_, i) => (
+                <EventCardSkeleton key={i} />
+              ))}
             </div>
           ) : events.length === 0 ? (
             <div className="bg-white/70 backdrop-blur-2xl rounded-[32px] p-16 text-center border border-white/90 shadow-[0_8px_30px_rgba(0,100,200,0.06)]">

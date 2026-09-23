@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /coordinator
+Disallow: /student
+Disallow: /tickets
+Disallow: /teams
+
+Sitemap: https://seatsync.simats.edu/sitemap.xml
