@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { getEventById, registerForEvent, registerTeamForEvent, isRegistrationClosed, logRegistrationToSheet, createNotification, getTeamByCode, type PaymentProof } from '@/lib/firebase';
+import { getEventById, registerForEvent, registerTeamForEvent, isRegistrationClosed, logRegistrationToSheet, createNotification, getTeamByCode, getUserRegistrations, cancelRegistration, type PaymentProof } from '@/lib/firebase';
 import { notifyPaymentSubmittedAPI, notifyTeamRegisteredAPI } from '@/lib/notificationApi';
 import { PaymentModal } from '@/components/events/PaymentModal';
 import { EventMap } from '@/components/events/EventMap';
@@ -12,7 +12,7 @@ import { EnrollStatusOverlay } from '@/components/ui/EnrollStatusOverlay';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import { CompactLoader } from '@/components/ui/CompactLoader';
 import type { DocumentData } from 'firebase/firestore';
-import { ArrowLeft, MapPin, Calendar, Clock, Info, Navigation, User, Phone } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Clock, Info, Navigation, User, Phone, Check, X, AlertCircle } from 'lucide-react';
 
 // Builds a URL to open for "Locate" — prefers an explicit Maps link,
 // otherwise falls back to a Maps search using lat/lng or the address text.
@@ -54,13 +54,85 @@ export const EventDetail: React.FC = () => {
   // Where to go once the success animation finishes playing
   const [successNext, setSuccessNext] = useState<string | null>(null);
 
+  // Enrollment state
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [registrationData, setRegistrationData] = useState<DocumentData | null>(null);
+  const [checkingEnrollment, setCheckingEnrollment] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
   useEffect(() => {
     if (!eventId) return;
-    getEventById(eventId).then((ev) => {
-      setEvent(ev);
-      setLoading(false);
-    });
+    setLoading(true);
+    getEventById(eventId)
+      .then((ev) => {
+        setEvent(ev);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch event:', err);
+        setLoading(false);
+      });
   }, [eventId]);
+
+  useEffect(() => {
+    if (!eventId || !userData?.id) {
+      setCheckingEnrollment(false);
+      return;
+    }
+
+    // Check real registration data from Firebase
+    const checkEnrollment = async () => {
+      try {
+        setCheckingEnrollment(true);
+        const regs = await getUserRegistrations(userData.id) as DocumentData[];
+        // Filter for active registrations for this event
+        const activeRegs = regs.filter(
+          r => r.event_id === eventId && r.status !== 'cancelled'
+        );
+
+        if (activeRegs.length > 0) {
+          // If multiple found (e.g. team member vs leader duplicate?), take the first one
+          setIsEnrolled(true);
+          setRegistrationData(activeRegs[0]);
+        } else {
+          setIsEnrolled(false);
+          setRegistrationData(null);
+        }
+      } catch (err) {
+        console.error('Error checking enrollment state:', err);
+      } finally {
+        setCheckingEnrollment(false);
+      }
+    };
+
+    checkEnrollment();
+  }, [eventId, userData?.id]);
+
+  const handleCancelEnrollment = async () => {
+    if (!userData?.id || !eventId) return;
+
+    setCancelling(true);
+    setError('');
+
+    try {
+      await cancelRegistration(userData.id, eventId);
+      // Immediately clear local enrolled state to reflect success
+      setIsEnrolled(false);
+      setRegistrationData(null);
+      setShowCancelConfirm(false);
+
+      // Also optionally refresh the event to get updated seat counts
+      const updatedEvent = await getEventById(eventId);
+      if (updatedEvent) setEvent(updatedEvent);
+
+    } catch (err) {
+      console.error('Failed to cancel enrollment:', err);
+      setError(err instanceof Error ? err.message : 'Could not cancel your enrollment. Please try again.');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const doRegister = async (payment?: PaymentProof) => {
     if (!userData || !eventId) return;
@@ -469,7 +541,40 @@ export const EventDetail: React.FC = () => {
             </p>
           </div>
 
-          {event.external_form_url && formOpened ? (
+          {isEnrolled ? (
+            <div className="flex items-center gap-2">
+              {registrationData?.id ? (
+                <button
+                  onClick={() => navigate(`/ticket/${registrationData.id}`)}
+                  className="px-5 py-3 rounded-full text-[14px] font-extrabold transition-all shadow-[0_8px_25px_rgba(52,199,89,0.25)] flex items-center justify-center gap-2 bg-[#34C759] hover:bg-[#28A745] text-white active:scale-95 whitespace-nowrap"
+                >
+                  <Check size={16} strokeWidth={3} />
+                  Enrolled<span className="hidden sm:inline"> (Ticket)</span>
+                </button>
+              ) : (
+                <div className="px-5 py-3 rounded-full text-[14px] font-extrabold flex items-center justify-center gap-2 bg-[#34C759]/15 border border-[#34C759]/30 text-[#28A745]">
+                  <Check size={16} strokeWidth={3} />
+                  Enrolled
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={cancelling}
+                className="px-4 py-3 rounded-full text-[14px] font-extrabold transition-all shadow-[0_8px_20px_rgba(239,68,68,0.2)] flex items-center justify-center gap-1.5 bg-red-500 hover:bg-red-600 text-white active:scale-95 disabled:opacity-50"
+                title="Cancel Enrollment"
+              >
+                {cancelling ? (
+                  <CompactLoader size="xs" className="text-white" />
+                ) : (
+                  <>
+                    <X size={16} strokeWidth={2.5} />
+                    <span className="hidden sm:inline">Cancel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          ) : event.external_form_url && formOpened ? (
             <button
               onClick={handleConfirmExternalForm}
               disabled={registering}
@@ -512,6 +617,46 @@ export const EventDetail: React.FC = () => {
         subtitle={event.team_based ? 'Your team tickets are ready' : 'Your ticket is ready'}
         onDone={() => { if (successNext) navigate(successNext); }}
       />
+
+      {showCancelConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-[28px] w-full max-w-sm p-6 text-center shadow-2xl border border-gray-100 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto mb-4 border border-red-100">
+              <AlertCircle size={24} />
+            </div>
+            <h3 className="text-[18px] font-bold text-[#1D1D1F] mb-1">Cancel Enrollment?</h3>
+            <p className="text-[14px] text-[#5E6C84] mb-6">
+              Are you sure you want to cancel your enrollment for <strong className="text-gray-800">{event?.title}</strong>? Your seat will be released.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                disabled={cancelling}
+                className="flex-1 py-3 px-4 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-[14px] transition-colors disabled:opacity-50"
+              >
+                Keep Seat
+              </button>
+              <button
+                onClick={handleCancelEnrollment}
+                disabled={cancelling}
+                className="flex-1 py-3 px-4 rounded-full bg-red-500 hover:bg-red-600 text-white font-bold text-[14px] flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-red-500/20"
+              >
+                {cancelling ? (
+                  <>
+                    <CompactLoader size="xs" className="text-white" />
+                    <span>Wait...</span>
+                  </>
+                ) : (
+                  <>
+                    <X size={16} strokeWidth={2.5} />
+                    <span>Yes, Cancel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <TeamChoiceModal
         isOpen={showTeamChoice}
