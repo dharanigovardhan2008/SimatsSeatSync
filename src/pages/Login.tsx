@@ -1,6 +1,6 @@
 // Login Page Component
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { loginWithEmail, loginWithGoogle, getUserDocument, logout as firebaseLogout, createOrUpdateUserDocument } from '@/lib/firebase';
 import { Card } from '@/components/ui/Card';
@@ -14,17 +14,19 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, userData, loading: authLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  // Present when arriving via a team invite link.
+  const redirectTo = searchParams.get('redirect') || '';
 
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user && userData) {
-      if (userData.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/student');
-      }
+      if (redirectTo) navigate(redirectTo);
+      else if (userData.role === 'admin') navigate('/admin');
+      else if (userData.role === 'coordinator') navigate('/coordinator');
+      else navigate('/student');
     }
-  }, [user, userData, authLoading, navigate]);
+  }, [user, userData, authLoading, navigate, redirectTo]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +44,10 @@ export const Login: React.FC = () => {
         { name: result.user.displayName || 'User' }
       );
       
-      if (userDoc.role === 'admin') {
-        navigate('/admin');
-      } else {
-        navigate('/student');
-      }
+      if (redirectTo) navigate(redirectTo);
+      else if (userDoc.role === 'admin') navigate('/admin');
+      else if (userDoc.role === 'coordinator') navigate('/coordinator');
+      else navigate('/student');
     } catch (err: unknown) {
       console.error('Login error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Login failed';
@@ -79,17 +80,16 @@ export const Login: React.FC = () => {
           { name: result.user.displayName || 'User' }
         );
         
-        if (updatedDoc.role === 'admin') {
-          navigate('/admin');
-        } else {
-          navigate('/student');
-        }
+        if (redirectTo) navigate(redirectTo);
+        else if (updatedDoc.role === 'admin') navigate('/admin');
+        else if (updatedDoc.role === 'coordinator') navigate('/coordinator');
+        else navigate('/student');
       } else {
         // User doesn't exist, redirect to register with prefilled Google data
         const googleName = result.user.displayName || '';
         // Sign out since we need them to complete registration
         await firebaseLogout();
-        navigate(`/register?email=${encodeURIComponent(userEmail)}&name=${encodeURIComponent(googleName)}&google=true`);
+        navigate(`/register?email=${encodeURIComponent(userEmail)}&name=${encodeURIComponent(googleName)}&google=true${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ''}`);
       }
     } catch (err: unknown) {
       console.error('Google login error:', err);
@@ -206,7 +206,7 @@ export const Login: React.FC = () => {
           {/* Register Link */}
           <p className="mt-8 text-center text-[#6B7280]">
             Don't have an account?{' '}
-            <Link to="/register" className="text-[#6C63FF] font-medium hover:underline">
+            <Link to={redirectTo ? `/register?redirect=${encodeURIComponent(redirectTo)}` : "/register"} className="text-[#6C63FF] font-medium hover:underline">
               Register here
             </Link>
           </p>

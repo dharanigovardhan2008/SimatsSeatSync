@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Navbar } from '@/components/layout/Navbar';
-import { subscribeToEvents } from '@/lib/firebase';
+import { getApprovedEvents } from '@/lib/firebase';
 import type { DocumentData } from 'firebase/firestore';
 
 interface EventData {
@@ -26,14 +26,17 @@ export const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = subscribeToEvents((eventsData: DocumentData[]) => {
-      const validEvents = (eventsData as EventData[]).filter(
-        (event) => event.status === 'Upcoming'
-      );
-      setEvents(validEvents);
-      setLoading(false);
-    });
-    return () => unsubscribe();
+    // Public landing page shows approved, upcoming events only. One-shot
+    // read rather than a listener to keep Firestore usage low.
+    let cancelled = false;
+    getApprovedEvents()
+      .then((eventsData: DocumentData[]) => {
+        if (cancelled) return;
+        setEvents((eventsData as EventData[]).filter((event) => event.status === 'Upcoming'));
+        setLoading(false);
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const formatDate = (dateStr: string) =>
@@ -97,7 +100,7 @@ export const Home: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {events.map((event) => {
-              const isFull = event.available_seats <= 0;
+              const isFull = event.available_seats !== null && event.available_seats !== undefined && event.available_seats <= 0;
 
               return (
                 <div key={event.id} className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-4 shadow-[0_12px_40px_rgba(0,100,200,0.08)] hover:shadow-[0_18px_50px_rgba(0,100,200,0.12)] transition-all border border-white flex flex-col group">

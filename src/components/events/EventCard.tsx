@@ -9,7 +9,7 @@ interface EventCardProps {
 
 export const EventCard: React.FC<EventCardProps> = ({ event }) => {
   const image = event.images?.[0];
-  const isFull = event.available_seats !== undefined && event.available_seats <= 0;
+  const isFull = event.available_seats !== undefined && event.available_seats !== null && event.available_seats <= 0;
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'Sep 05';

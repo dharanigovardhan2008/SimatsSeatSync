@@ -263,9 +263,10 @@ export const AdminDashboard: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {events.map((event) => {
-                  const fillPercentage = ((event.total_seats - event.available_seats) / event.total_seats) * 100;
+                  const isUnlimited = event.total_seats === null || event.total_seats === undefined;
+                  const fillPercentage = isUnlimited ? 0 : ((event.total_seats - (event.available_seats ?? 0)) / event.total_seats) * 100;
                   const waitlistCount  = getWaitlistForEvent(event.id);
-                  const isFull = event.available_seats <= 0;
+                  const isFull = !isUnlimited && event.available_seats !== null && event.available_seats !== undefined && event.available_seats <= 0;
                   
                   return (
                     <div key={event.id} className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-6 shadow-[0_12px_40px_rgba(0,100,200,0.08)] hover:shadow-[0_18px_50px_rgba(0,100,200,0.12)] transition-all border border-white flex flex-col group relative overflow-hidden">

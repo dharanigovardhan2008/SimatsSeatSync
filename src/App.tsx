@@ -10,8 +10,14 @@ import { AdminDashboard } from '@/pages/AdminDashboard';
 import { AdminEvents } from '@/pages/AdminEvents';
 import { CoordinatorDashboard } from '@/pages/CoordinatorDashboard';
 import { CoordinatorEventForm } from '@/pages/CoordinatorEventForm';
+import { ScanQR } from '@/pages/ScanQR';
+import { TeamInvite } from '@/pages/TeamInvite';
+import { JoinTeam } from '@/pages/JoinTeam';
+import { PaymentVerificationPage } from '@/pages/PaymentVerificationPage';
 import { EventDetail } from '@/pages/EventDetail';
 import { Ticket } from '@/pages/Ticket';
+import { MyTickets } from '@/pages/MyTickets';
+import { TeamTickets } from '@/pages/TeamTickets';
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
@@ -51,15 +57,36 @@ const AuthedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
+// Signed-in users go straight to their own dashboard instead of the
+// marketing home page; visitors still get the home page.
+const RootRoute: React.FC = () => {
+  const { user, userData, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#E0E5EC] flex items-center justify-center">
+        <div className="w-14 h-14 rounded-full border-4 border-[#6C63FF] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+  if (user && userData) {
+    if (userData.role === 'admin') return <Navigate to="/admin" replace />;
+    if (userData.role === 'coordinator') return <Navigate to="/coordinator" replace />;
+    return <Navigate to="/student" replace />;
+  }
+  return <Home />;
+};
+
 const AppRoutes: React.FC = () => {
   return (
     <Routes>
-      <Route path="/" element={<Home />} />
+      <Route path="/" element={<RootRoute />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
       <Route path="/event/:eventId" element={<AuthedRoute><EventDetail /></AuthedRoute>} />
       <Route path="/ticket/:registrationId" element={<AuthedRoute><Ticket /></AuthedRoute>} />
+      <Route path="/tickets" element={<AuthedRoute><MyTickets /></AuthedRoute>} />
+      <Route path="/team-tickets/:teamId" element={<AuthedRoute><TeamTickets /></AuthedRoute>} />
 
       <Route path="/student" element={<StudentRoute><StudentDashboard /></StudentRoute>} />
 
@@ -69,6 +96,13 @@ const AppRoutes: React.FC = () => {
       <Route path="/coordinator" element={<CoordinatorRoute><CoordinatorDashboard /></CoordinatorRoute>} />
       <Route path="/coordinator/events/new" element={<CoordinatorRoute><CoordinatorEventForm /></CoordinatorRoute>} />
       <Route path="/coordinator/events/:eventId/edit" element={<CoordinatorRoute><CoordinatorEventForm /></CoordinatorRoute>} />
+      <Route path="/scan/:eventId" element={<AuthedRoute><ScanQR /></AuthedRoute>} />
+      <Route path="/team-invite/:teamId" element={<AuthedRoute><TeamInvite /></AuthedRoute>} />
+      {/* Not wrapped in AuthedRoute: JoinTeam itself redirects to /register
+          when signed out, preserving this URL via ?redirect= so the user
+          lands back here right after creating an account. */}
+      <Route path="/join-team/:teamId" element={<JoinTeam />} />
+      <Route path="/payments/:eventId" element={<AuthedRoute><PaymentVerificationPage /></AuthedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

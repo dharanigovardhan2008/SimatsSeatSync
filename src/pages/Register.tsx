@@ -40,6 +40,9 @@ export const Register: React.FC = () => {
   const isGoogleRedirect = searchParams.get('google') === 'true';
   const prefilledEmail = searchParams.get('email') || '';
   const prefilledName = searchParams.get('name') || '';
+  // Present when arriving via a team invite link, so a fresh signup lands
+  // back on the join-team page instead of the default dashboard.
+  const redirectTo = searchParams.get('redirect') || '';
   
   const [formData, setFormData] = useState({
     name: prefilledName,
@@ -50,6 +53,9 @@ export const Register: React.FC = () => {
     department: '',
     role: 'student' as 'student' | 'coordinator'
   });
+  // Step 1 of signup is picking a role; the rest of the form only appears
+  // once that's chosen, because the required fields differ per role.
+  const [roleChosen, setRoleChosen] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -58,15 +64,12 @@ export const Register: React.FC = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!authLoading && user && userData) {
-      if (userData.role === 'admin') {
-        navigate('/admin');
-      } else if (userData.role === 'coordinator') {
-        navigate('/coordinator');
-      } else {
-        navigate('/student');
-      }
+      if (redirectTo) navigate(redirectTo);
+      else if (userData.role === 'admin') navigate('/admin');
+      else if (userData.role === 'coordinator') navigate('/coordinator');
+      else navigate('/student');
     }
-  }, [user, userData, authLoading, navigate]);
+  }, [user, userData, authLoading, navigate, redirectTo]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData(prev => ({
@@ -92,13 +95,15 @@ export const Register: React.FC = () => {
       setError('Passwords do not match');
       return false;
     }
-    if (!formData.regNo.trim()) {
-      setError('Register number is required');
-      return false;
-    }
-    if (!formData.department) {
-      setError('Please select a department');
-      return false;
+    if (formData.role === 'student') {
+      if (!formData.regNo.trim()) {
+        setError('Register number is required');
+        return false;
+      }
+      if (!formData.department) {
+        setError('Please select a department');
+        return false;
+      }
     }
     return true;
   };
@@ -113,11 +118,13 @@ export const Register: React.FC = () => {
 
     try {
       // Check if register number already exists
-      const regNoExists = await checkRegNoExists(formData.regNo);
-      if (regNoExists) {
-        setError('This register number is already registered');
-        setLoading(false);
-        return;
+      if (formData.role === 'student') {
+        const regNoExists = await checkRegNoExists(formData.regNo);
+        if (regNoExists) {
+          setError('This register number is already registered');
+          setLoading(false);
+          return;
+        }
       }
 
       // Create auth user
@@ -129,20 +136,17 @@ export const Register: React.FC = () => {
       // Create user document in Firestore
       await createUserDocument(result.user.uid, {
         name: formData.name,
-        reg_no: formData.regNo,
-        department: formData.department,
+        reg_no: formData.role === 'student' ? formData.regNo : '',
+        department: formData.role === 'student' ? formData.department : '',
         role: role,
         email: formData.email
       });
 
-      // Navigate based on role
-      if (role === 'admin') {
-        navigate('/admin');
-      } else if (role === 'coordinator') {
-        navigate('/coordinator');
-      } else {
-        navigate('/student');
-      }
+      // Navigate based on role, unless we arrived via an invite link
+      if (redirectTo) navigate(redirectTo);
+      else if (role === 'admin') navigate('/admin');
+      else if (role === 'coordinator') navigate('/coordinator');
+      else navigate('/student');
     } catch (err: unknown) {
       console.error('Registration error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Registration failed';
@@ -165,15 +169,13 @@ export const Register: React.FC = () => {
       const userDoc = await getUserDocument(result.user.uid);
       
       if (userDoc) {
-        // User already exists, redirect based on role
+        // User already exists, redirect based on role (or back to the
+        // invite link that brought them here, if any)
         const existingUser = userDoc as { id: string; role: string };
-        if (existingUser.role === 'admin') {
-          navigate('/admin');
-        } else if (existingUser.role === 'coordinator') {
-          navigate('/coordinator');
-        } else {
-          navigate('/student');
-        }
+        if (redirectTo) navigate(redirectTo);
+        else if (existingUser.role === 'admin') navigate('/admin');
+        else if (existingUser.role === 'coordinator') navigate('/coordinator');
+        else navigate('/student');
       } else {
         // Get Google user info and prefill the form
         const googleEmail = result.user.email || '';
@@ -190,7 +192,7 @@ export const Register: React.FC = () => {
         }));
         
         // Update URL to show google redirect state
-        navigate(`/register?email=${encodeURIComponent(googleEmail)}&name=${encodeURIComponent(googleName)}&google=true`, { replace: true });
+        navigate(`/register?email=${encodeURIComponent(googleEmail)}&name=${encodeURIComponent(googleName)}&google=true${redirectTo ? `&redirect=${encodeURIComponent(redirectTo)}` : ''}`, { replace: true });
       }
     } catch (err: unknown) {
       console.error('Google sign up error:', err);
@@ -228,8 +230,82 @@ export const Register: React.FC = () => {
           </p>
         </div>
 
-        {/* Register Card */}
+        {/* Step 1 — pick a role before showing the rest of the form */}
+        {!roleChosen ? (
+          <Card className="p-10">
+            <h2 className="font-display font-bold text-xl text-[#3D4852] mb-2 text-center">
+              First, who are you?
+            </h2>
+            <p className="text-sm text-[#6B7280] mb-8 text-center">
+              This decides what details we need from you.
+            </p>
+
+            <div className="space-y-4">
+              {ROLES.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      role: r.value as 'student' | 'coordinator',
+                      // Clear student-only fields when switching to coordinator
+                      regNo: r.value === 'student' ? prev.regNo : '',
+                      department: r.value === 'student' ? prev.department : '',
+                    }));
+                    setError('');
+                    setRoleChosen(true);
+                  }}
+                  className="w-full p-6 rounded-3xl bg-[#E0E5EC] shadow-[6px_6px_12px_rgb(163,177,198,0.6),-6px_-6px_12px_rgba(255,255,255,0.7)] hover:shadow-[inset_4px_4px_8px_rgb(163,177,198,0.6),inset_-4px_-4px_8px_rgba(255,255,255,0.7)] transition-all text-left group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#6C63FF] to-[#8B84FF] flex items-center justify-center shrink-0">
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {r.value === 'student' ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        )}
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-bold text-[#3D4852] text-lg">{r.label}</p>
+                      <p className="text-sm text-[#6B7280]">
+                        {r.value === 'student'
+                          ? 'Browse events and book your seat'
+                          : 'Create and manage events'}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-8 text-center text-sm text-[#6B7280]">
+              Already have an account?{' '}
+              <Link to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="font-semibold text-[#6C63FF] hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </Card>
+        ) : (
         <Card className="p-10">
+          <div className="flex items-center justify-between mb-6 pb-5 border-b border-[#D1D9E6]">
+            <div>
+              <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wide">Signing up as</p>
+              <p className="font-bold text-[#3D4852] text-lg">
+                {ROLES.find((r) => r.value === formData.role)?.label}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setRoleChosen(false); setError(''); }}
+              className="text-sm font-semibold text-[#6C63FF] hover:underline"
+            >
+              Change
+            </button>
+          </div>
+
           <form onSubmit={handleRegister} className="space-y-5">
             {isGoogleRedirect && (
               <div className="p-4 rounded-2xl bg-blue-50 text-blue-700 text-sm shadow-[inset_3px_3px_6px_rgba(100,100,255,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.5)]">
@@ -290,33 +366,30 @@ export const Register: React.FC = () => {
               />
             </div>
 
-            <Input
-              label="Register Number"
-              type="text"
-              name="regNo"
-              placeholder="Enter your register number"
-              value={formData.regNo}
-              onChange={handleChange}
-              required
-            />
+            {/* Students give a register number and department; coordinators
+                have neither, so those fields are skipped entirely. */}
+            {formData.role === 'student' && (
+              <>
+                <Input
+                  label="Register Number"
+                  type="text"
+                  name="regNo"
+                  placeholder="Enter your register number"
+                  value={formData.regNo}
+                  onChange={handleChange}
+                  required
+                />
 
-            <Select
-              label="Department"
-              name="department"
-              value={formData.department}
-              onChange={handleChange}
-              options={DEPARTMENTS}
-              required
-            />
-
-            <Select
-              label="I am registering as"
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              options={ROLES}
-              required
-            />
+                <Select
+                  label="Department"
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  options={DEPARTMENTS}
+                  required
+                />
+              </>
+            )}
 
             <Button
               type="submit"
@@ -370,11 +443,12 @@ export const Register: React.FC = () => {
           {/* Login Link */}
           <p className="mt-8 text-center text-[#6B7280]">
             Already have an account?{' '}
-            <Link to="/login" className="text-[#6C63FF] font-medium hover:underline">
+            <Link to={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="text-[#6C63FF] font-medium hover:underline">
               Sign in here
             </Link>
           </p>
         </Card>
+        )}
       </div>
     </div>
   );

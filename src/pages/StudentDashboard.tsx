@@ -3,14 +3,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Navbar } from '@/components/layout/Navbar';
-import { Button } from '@/components/ui/Button';
+import { EnrollStatusOverlay } from '@/components/ui/EnrollStatusOverlay';
 import { 
-  subscribeToEvents, 
+  getApprovedEvents, 
   registerForEvent, 
   getUserRegistrations,
   cancelRegistration,
   subscribeToWaitlist,
-  getUserDocument
+  getUserDocument,
+  logRegistrationToSheet
 } from '@/lib/firebase';
 import type { DocumentData } from 'firebase/firestore';
 
@@ -21,15 +22,35 @@ interface EventData {
   date: string;
   start_time?: string;
   end_time?: string;
-  total_seats: number;
-  available_seats: number;
+  total_seats: number | null;
+  available_seats: number | null;
   status: 'Upcoming' | 'Closed';
   is_mandatory?: boolean;
   target_branches?: string[];
   images?: string[];
-  location?: { address: string; lat: number; lng: number };
+  location?: { address: string; lat?: number; lng?: number };
+  map_link?: string;
   registration_fee?: number;
+  team_based?: boolean;
+  external_form_url?: string;
+  sheet_webhook_url?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  is_paid?: boolean;
 }
+
+// Builds a URL to open for "Locate" — prefers an explicit Maps link,
+// otherwise falls back to a Maps search using lat/lng or the address text.
+const buildLocateUrl = (event: EventData): string | null => {
+  if (event.map_link) return event.map_link;
+  if (event.location?.lat && event.location?.lng) {
+    return `https://www.google.com/maps/search/?api=1&query=${event.location.lat},${event.location.lng}`;
+  }
+  if (event.location?.address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location.address)}`;
+  }
+  return null;
+};
 
 const isEventHidden = (event: EventData): boolean => {
   if (!event.date) return false;
@@ -52,12 +73,14 @@ export const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [events, setEvents] = useState<EventData[]>([]);
   const [registeredEvents, setRegisteredEvents] = useState<Set<string>>(new Set());
+  const [ticketByEvent, setTicketByEvent] = useState<Map<string, string>>(new Map()); // eventId -> registrationId (or leader's, for "View Ticket")
   const [waitlistedEvents, setWaitlistedEvents] = useState<Map<string, number>>(new Map());
   const [loadingEvent, setLoadingEvent] = useState<string | null>(null);
   const [cancellingEvent, setCancellingEvent] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info' | 'blocked'; text: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'events' | 'bookings'>('events');
   const [isBlocked, setIsBlocked] = useState(false);
+  const [successNext, setSuccessNext] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && (!user || !userData)) {
@@ -77,24 +100,67 @@ export const StudentDashboard: React.FC = () => {
   }, [user]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToEvents((eventsData: DocumentData[]) => {
-      const filteredEvents = (eventsData as EventData[]).filter(event => {
-        if (!['Workshop', 'Seminar', 'Hackathon'].includes(event.type)) return false;
-        if (isEventHidden(event)) return false;
-        if (!event.target_branches || event.target_branches.length === 0) return true;
-        return event.target_branches.includes(userData?.department || '');
+    // One-shot fetch of admin-approved events only. A live listener would
+    // re-read every event document on each change, which burns through the
+    // free Firestore read quota; the event list barely moves in a session.
+    let cancelled = false;
+    getApprovedEvents()
+      .then((eventsData: DocumentData[]) => {
+        if (cancelled) return;
+        // Temporary diagnostics: logs exactly why each approved event is
+        // shown or hidden, since "the list is empty" gives no clue which
+        // filter did it. Safe to remove once things are working — just
+        // delete this console.table block and the reason-tracking below.
+        const debugRows: Record<string, unknown>[] = [];
+        const filteredEvents = (eventsData as EventData[]).filter(event => {
+          const hidden = isEventHidden(event);
+          const branchOk = !event.target_branches || event.target_branches.length === 0
+            || event.target_branches.includes(userData?.department || '');
+          debugRows.push({
+            title: event.title,
+            date: event.date,
+            start_time: event.start_time,
+            end_time: event.end_time,
+            hiddenByTimeRule: hidden,
+            branchMatch: branchOk,
+            target_branches: (event.target_branches || []).join(', ') || '(all)',
+            studentDept: userData?.department,
+            shown: !hidden && branchOk,
+          });
+          return !hidden && branchOk;
+        });
+        console.log(`Fetched ${eventsData.length} approved event(s), showing ${filteredEvents.length} after filters:`);
+        console.table(debugRows);
+        setEvents(filteredEvents);
+      })
+      .catch((err) => {
+        console.error('Could not load events:', err);
+        setMessage({
+          type: 'error',
+          text: 'Could not load events. If this keeps happening, check the browser console for a Firestore error.',
+        });
       });
-      setEvents(filteredEvents);
-    });
-    return () => unsubscribe();
+    return () => { cancelled = true; };
   }, [userData?.department]);
 
   useEffect(() => {
     const fetchRegistrations = async () => {
       if (user) {
         try {
-          const regs = await getUserRegistrations(user.uid);
-          setRegisteredEvents(new Set(regs.map((r: DocumentData) => r.event_id as string)));
+          const allRegs = await getUserRegistrations(user.uid) as DocumentData[];
+          // A cancelled registration shouldn't block re-registering or show
+          // up as a live ticket shortcut.
+          const regs = allRegs.filter((r) => r.status !== 'cancelled');
+          setRegisteredEvents(new Set(regs.map((r) => r.event_id as string)));
+          const ticketMap = new Map<string, string>();
+          regs.forEach((r) => {
+            // If several docs share an event (a team registration), prefer the
+            // leader's own ticket for the "View Ticket" shortcut.
+            if (!ticketMap.has(r.event_id) || r.is_leader) {
+              ticketMap.set(r.event_id, r.id as string);
+            }
+          });
+          setTicketByEvent(ticketMap);
         } catch (error) {
           console.error('Error fetching registrations:', error);
         }
@@ -117,6 +183,15 @@ export const StudentDashboard: React.FC = () => {
 
   const handleRegister = async (eventId: string) => {
     if (!user || !userData) return;
+
+    // Team-based and external-form events need extra UI (a modal, or an
+    // "open form → confirm" step) that only the full event page has.
+    const event = events.find(e => e.id === eventId);
+    if (event?.team_based || event?.external_form_url || event?.is_paid) {
+      navigate(`/event/${eventId}`);
+      return;
+    }
+
     const freshDoc = await getUserDocument(user.uid) as DocumentData | null;
     if (freshDoc?.is_blocked) {
       setIsBlocked(true);
@@ -126,19 +201,37 @@ export const StudentDashboard: React.FC = () => {
     setLoadingEvent(eventId);
     setMessage(null);
     try {
-      const result = await registerForEvent(user.uid, eventId, userData.department);
+      const result = await registerForEvent(user.uid, eventId, userData.department, { name: userData.name, email: userData.email, reg_no: userData.reg_no, department: userData.department });
       if (result.status === 'registered') {
         setRegisteredEvents(prev => new Set([...prev, eventId]));
         setMessage({ type: 'success', text: result.message });
+        if (event?.sheet_webhook_url && result.registrationId) {
+          logRegistrationToSheet(event.sheet_webhook_url, {
+            event_title: event.title,
+            event_id: eventId,
+            registration_id: result.registrationId,
+            participant_name: userData.name,
+            participant_email: userData.email,
+            reg_no: userData.reg_no,
+            department: userData.department,
+            registered_at: new Date().toISOString(),
+          });
+        }
         if (result.registrationId) {
-          navigate(`/ticket/${result.registrationId}`);
+          setSuccessNext(`/ticket/${result.registrationId}`);
           return;
         }
       } else if (result.status === 'waitlisted') {
         setMessage({ type: 'info', text: result.message });
       }
-      const regs = await getUserRegistrations(user.uid);
-      setRegisteredEvents(new Set(regs.map((r: DocumentData) => r.event_id as string)));
+      const allRegs = await getUserRegistrations(user.uid) as DocumentData[];
+      const regs = allRegs.filter((r) => r.status !== 'cancelled');
+      setRegisteredEvents(new Set(regs.map((r) => r.event_id as string)));
+      const ticketMap = new Map<string, string>();
+      regs.forEach((r) => {
+        if (!ticketMap.has(r.event_id) || r.is_leader) ticketMap.set(r.event_id, r.id as string);
+      });
+      setTicketByEvent(ticketMap);
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Registration failed';
       const isBlockError = errorMessage.toLowerCase().includes('blocked');
@@ -198,6 +291,10 @@ export const StudentDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] text-[#1D1D1F] pb-24" style={{ fontFamily: '"DM Sans", sans-serif' }}>
       <Navbar />
+      <EnrollStatusOverlay
+        phase={successNext ? 'success' : loadingEvent ? 'enrolling' : 'idle'}
+        onDone={() => { if (successNext) navigate(successNext); }}
+      />
 
       <main className="max-w-[1100px] mx-auto px-4 sm:px-6 pt-8 sm:pt-10 relative z-10">
         
@@ -277,7 +374,7 @@ export const StudentDashboard: React.FC = () => {
                   const isRegistered    = registeredEvents.has(event.id);
                   const waitlistPosition = waitlistedEvents.get(event.id);
                   const isWaitlisted    = waitlistPosition !== undefined;
-                  const isFull          = event.available_seats <= 0;
+                  const isFull          = event.available_seats !== null && event.available_seats !== undefined && event.available_seats <= 0;
 
                   return (
                     <div key={event.id} className="bg-white/80 backdrop-blur-2xl rounded-[32px] p-4 shadow-[0_12px_40px_rgba(0,100,200,0.08)] hover:shadow-[0_18px_50px_rgba(0,100,200,0.12)] transition-all border border-white flex flex-col group">
@@ -328,13 +425,20 @@ export const StudentDashboard: React.FC = () => {
 
                         {/* Location & Fee */}
                         <div className="flex items-center justify-between text-[13px] text-[#5E6C84] font-medium">
-                          <div className="flex items-center gap-1.5 truncate">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = buildLocateUrl(event);
+                              if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                            }}
+                            className="flex items-center gap-1.5 truncate hover:text-[#1D1D1F] hover:underline transition-colors"
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-[14px] h-[14px] shrink-0">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                             </svg>
                             <span className="truncate">{event.location?.address || 'SIMATS Campus'}</span>
-                          </div>
+                          </button>
                           <span className="font-extrabold text-[#1D1D1F] shrink-0">
                             {event.registration_fee && event.registration_fee > 0 ? `₹${event.registration_fee}` : 'Free'}
                           </span>
@@ -351,7 +455,7 @@ export const StudentDashboard: React.FC = () => {
                             </span>
                           </div>
                           <span className={`text-[12px] font-bold ${isFull ? 'text-red-500' : 'text-[#38B2AC]'}`}>
-                            {isFull ? 'Full' : `${event.available_seats} seats left`}
+                            {isFull ? 'Full' : event.available_seats === null ? 'Unlimited' : `${event.available_seats} seats left`}
                           </span>
                         </div>
 
@@ -391,7 +495,7 @@ export const StudentDashboard: React.FC = () => {
                             <button
                               onClick={() => handleRegister(event.id)}
                               disabled={loadingEvent === event.id}
-                              className="w-full py-3 px-4 rounded-full bg-white/80 hover:bg-white backdrop-blur-2xl border border-white/90 text-[#1D1D1F] font-extrabold text-[14px] transition-all shadow-[0_8px_20px_rgba(0,100,200,0.1)] hover:shadow-[0_10px_25px_rgba(0,100,200,0.18)] active:scale-95 flex items-center justify-center gap-2 group/btn"
+                              className="w-full py-3 px-4 rounded-full bg-[#1D1D1F] hover:bg-black text-white font-extrabold text-[14px] transition-all shadow-[0_8px_20px_rgba(0,0,0,0.25)] hover:shadow-[0_10px_25px_rgba(0,0,0,0.35)] active:scale-95 flex items-center justify-center gap-2 group/btn disabled:opacity-70"
                             >
                               <span>{loadingEvent === event.id ? 'Enrolling...' : 'Enroll Now'}</span>
                               <svg className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
@@ -474,13 +578,20 @@ export const StudentDashboard: React.FC = () => {
 
                         {/* Location & Fee */}
                         <div className="flex items-center justify-between text-[13px] text-[#5E6C84] font-medium">
-                          <div className="flex items-center gap-1.5 truncate">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = buildLocateUrl(event);
+                              if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                            }}
+                            className="flex items-center gap-1.5 truncate hover:text-[#1D1D1F] hover:underline transition-colors"
+                          >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-[14px] h-[14px] shrink-0">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                             </svg>
                             <span className="truncate">{event.location?.address || 'SIMATS Campus'}</span>
-                          </div>
+                          </button>
                           <span className="font-extrabold text-[#1D1D1F] shrink-0">
                             {event.registration_fee && event.registration_fee > 0 ? `₹${event.registration_fee}` : 'Free'}
                           </span>
@@ -503,9 +614,9 @@ export const StudentDashboard: React.FC = () => {
 
                         {/* Action Buttons with Premium Glassy Theme */}
                         <div className="mt-3 pt-1 grid grid-cols-2 gap-2">
-                          <Link to={`/event/${event.id}`} className="w-full">
+                          <Link to={ticketByEvent.has(event.id) ? `/ticket/${ticketByEvent.get(event.id)}` : `/event/${event.id}`} className="w-full">
                             <button className="w-full py-2.5 px-3 rounded-full bg-white/80 hover:bg-white backdrop-blur-2xl border border-white/90 text-[#1D1D1F] font-bold text-[13px] transition-all shadow-sm active:scale-95 flex items-center justify-center">
-                              View Ticket
+                              {ticketByEvent.has(event.id) ? 'View Ticket' : 'View Event'}
                             </button>
                           </Link>
                           <button

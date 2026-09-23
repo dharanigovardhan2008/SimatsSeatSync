@@ -2,10 +2,27 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { getEventById, registerForEvent } from '@/lib/firebase';
+import { getEventById, registerForEvent, registerTeamForEvent, isRegistrationClosed, logRegistrationToSheet, createNotification, getTeamByCode, type PaymentProof } from '@/lib/firebase';
+import { PaymentModal } from '@/components/events/PaymentModal';
 import { EventMap } from '@/components/events/EventMap';
+import { TeamEnrollModal } from '@/components/events/TeamEnrollModal';
+import { TeamChoiceModal } from '@/components/events/TeamChoiceModal';
+import { EnrollStatusOverlay } from '@/components/ui/EnrollStatusOverlay';
 import type { DocumentData } from 'firebase/firestore';
-import { ArrowLeft, MapPin, Calendar, Clock, Info } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, Clock, Info, Navigation, User, Phone } from 'lucide-react';
+
+// Builds a URL to open for "Locate" — prefers an explicit Maps link,
+// otherwise falls back to a Maps search using lat/lng or the address text.
+const buildLocateUrl = (event: DocumentData): string | null => {
+  if (event.map_link) return event.map_link;
+  if (event.location?.lat && event.location?.lng) {
+    return `https://www.google.com/maps/search/?api=1&query=${event.location.lat},${event.location.lng}`;
+  }
+  if (event.location?.address) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location.address)}`;
+  }
+  return null;
+};
 
 export const EventDetail: React.FC = () => {
   const { eventId } = useParams();
@@ -16,6 +33,23 @@ export const EventDetail: React.FC = () => {
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState('');
   const [registering, setRegistering] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showTeamChoice, setShowTeamChoice] = useState(false);
+  const [joiningByCode, setJoiningByCode] = useState(false);
+  const [joinCodeError, setJoinCodeError] = useState('');
+  const [teamError, setTeamError] = useState('');
+
+  // Payment (only used when event.is_paid)
+  const [showPayment, setShowPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  // Holds team details already collected while we wait for payment, so
+  // the actual team registration only fires after a UTR is submitted.
+  const [pendingTeam, setPendingTeam] = useState<{ teamName: string; teammates: { name: string; email?: string }[] } | null>(null);
+
+  // External-form flow: after opening the form we show a "confirm" step
+  const [formOpened, setFormOpened] = useState(false);
+  // Where to go once the success animation finishes playing
+  const [successNext, setSuccessNext] = useState<string | null>(null);
 
   useEffect(() => {
     if (!eventId) return;
@@ -25,22 +59,177 @@ export const EventDetail: React.FC = () => {
     });
   }, [eventId]);
 
-  const handleGetTicket = async () => {
+  const doRegister = async (payment?: PaymentProof) => {
     if (!userData || !eventId) return;
     setError('');
     setRegistering(true);
     try {
-      const result = await registerForEvent(userData.id, eventId, userData.department);
+      const result = await registerForEvent(
+        userData.id, eventId, userData.department,
+        { name: userData.name, email: userData.email, reg_no: userData.reg_no, department: userData.department },
+        payment
+      );
       if (result.status === 'registered' && result.registrationId) {
-        navigate(`/ticket/${result.registrationId}`);
+        if (event?.sheet_webhook_url) {
+          logRegistrationToSheet(event.sheet_webhook_url, {
+            event_title: event.title,
+            event_id: eventId,
+            registration_id: result.registrationId,
+            participant_name: userData.name,
+            participant_email: userData.email,
+            reg_no: userData.reg_no,
+            department: userData.department,
+            payment_status: payment ? 'pending_verification' : undefined,
+            payment_utr: payment?.utr,
+            payment_amount: payment?.amount != null ? String(payment.amount) : undefined,
+            registered_at: new Date().toISOString(),
+          });
+        }
+        setShowPayment(false);
+        // The QR/ticket stays locked until a coordinator manually verifies
+        // this UTR — let them know one is waiting instead of them having
+        // to check every event's queue.
+        if (payment && event?.coordinator_id) {
+          createNotification(
+            event.coordinator_id,
+            'New Payment Submitted',
+            `${userData.name} submitted a payment reference for ${event.title}. Tap to review.`,
+            `/payments/${eventId}`
+          );
+        }
+        setSuccessNext(`/ticket/${result.registrationId}`);
       } else {
         setError('The event is full — you have been added to the waitlist.');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not register for this event');
+      const msg = e instanceof Error ? e.message : 'Could not register for this event';
+      if (payment) setPaymentError(msg); else setError(msg);
     } finally {
       setRegistering(false);
     }
+  };
+
+  const handleEnrollClick = () => {
+    if (!event) return;
+    if (event.external_form_url) {
+      window.open(event.external_form_url, '_blank', 'noopener,noreferrer');
+      setFormOpened(true);
+      return;
+    }
+    if (event.team_based) {
+      setJoinCodeError('');
+      setShowTeamChoice(true);
+      return;
+    }
+    if (event.is_paid) {
+      setPaymentError('');
+      setShowPayment(true);
+      return;
+    }
+    doRegister();
+  };
+
+  const handleJoinWithCode = async (code: string) => {
+    if (!eventId) return;
+    setJoiningByCode(true);
+    setJoinCodeError('');
+    try {
+      const team = await getTeamByCode(eventId, code);
+      if (!team) {
+        setJoinCodeError('No team found with that code for this event. Check with your team leader.');
+        return;
+      }
+      navigate(`/join-team/${team.id}`);
+    } catch (e) {
+      setJoinCodeError(e instanceof Error ? e.message : 'Could not look up that code.');
+    } finally {
+      setJoiningByCode(false);
+    }
+  };
+
+  const handleCreateNewTeam = () => {
+    setShowTeamChoice(false);
+    setTeamError('');
+    setShowTeamModal(true);
+  };
+
+  // After the student says they've submitted the external form, we
+  // register them normally so a ticket gets generated. We can't detect
+  // an actual return from the external tab, so this is a manual confirm.
+  const handleConfirmExternalForm = async () => {
+    await doRegister();
+  };
+
+  const finishTeamRegistration = async (
+    teamName: string,
+    teammates: { name: string; email?: string }[],
+    payment?: PaymentProof
+  ) => {
+    if (!userData || !eventId || !event) return;
+    setRegistering(true);
+    try {
+      const members = [{ name: userData.name, email: userData.email, reg_no: userData.reg_no, department: userData.department }, ...teammates];
+      const result = await registerTeamForEvent(userData.id, eventId, userData.department, teamName, members, payment);
+      if (event.sheet_webhook_url) {
+        result.registrationIds.forEach((regId, i) => {
+          logRegistrationToSheet(event.sheet_webhook_url!, {
+            event_title: event.title,
+            event_id: eventId,
+            registration_id: regId,
+            participant_name: members[i].name,
+            participant_email: members[i].email,
+            reg_no: i === 0 ? userData.reg_no : undefined,
+            department: userData.department,
+            team_name: teamName,
+            team_id: result.teamId,
+            is_leader: i === 0,
+            payment_status: payment ? 'pending_verification' : undefined,
+            payment_utr: i === 0 ? payment?.utr : undefined,
+            payment_amount: i === 0 && payment?.amount != null ? String(payment.amount) : undefined,
+            registered_at: new Date().toISOString(),
+          });
+        });
+      }
+      setShowTeamModal(false);
+      setShowPayment(false);
+      setPendingTeam(null);
+      if (payment && event?.coordinator_id) {
+        createNotification(
+          event.coordinator_id,
+          'New Payment Submitted',
+          `${teamName} (led by ${userData.name}) submitted a payment reference for ${event.title}. Tap to review.`,
+          `/payments/${eventId}`
+        );
+      }
+      // Team leaders go to the invite-link screen first so they can share
+      // it — the team-tickets list (with everyone who's joined so far) is
+      // still one tap away from there.
+      setSuccessNext(`/team-invite/${result.teamId}?ticket=${result.registrationIds[0]}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not register your team';
+      if (payment) setPaymentError(msg); else setTeamError(msg);
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const handleTeamSubmit = async (teamName: string, teammates: { name: string; email?: string }[]) => {
+    if (!teamName) {
+      setTeamError('Team name is required.');
+      return;
+    }
+    setTeamError('');
+    if (event?.is_paid) {
+      // Hold the team details and collect payment before actually
+      // registering anyone — registerTeamForEvent takes the payment
+      // proof as part of the same call.
+      setPendingTeam({ teamName, teammates });
+      setShowTeamModal(false);
+      setPaymentError('');
+      setShowPayment(true);
+      return;
+    }
+    await finishTeamRegistration(teamName, teammates);
   };
 
   if (loading) {
@@ -72,7 +261,9 @@ export const EventDetail: React.FC = () => {
   }
 
   const heroImage = event.images?.[0];
-  const isFull = event.available_seats <= 0;
+  const isFull = event.available_seats !== null && event.available_seats !== undefined && event.available_seats <= 0;
+  const regClosed = isRegistrationClosed(event);
+  const locateUrl = buildLocateUrl(event);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#E6F3FF] via-[#F0F7FF] to-[#F8FBFF] font-sans pb-36 flex flex-col items-center" style={{ fontFamily: '"DM Sans", sans-serif' }}>
@@ -111,12 +302,16 @@ export const EventDetail: React.FC = () => {
           {/* Top Overlays Container (Fixes Overlap) */}
           <div className="absolute top-5 left-5 right-5 flex justify-between items-start gap-4">
             
-            {/* Location Pill Overlay */}
+            {/* Location Pill Overlay — clickable, opens the Locate link */}
             {event.location?.address && (
-              <div className="flex-1 min-w-0 max-w-fit bg-black/50 backdrop-blur-xl border border-white/10 text-white text-[13px] font-bold px-4 py-2.5 rounded-full flex items-center gap-2 shadow-lg">
+              <button
+                type="button"
+                onClick={() => locateUrl && window.open(locateUrl, '_blank', 'noopener,noreferrer')}
+                className="flex-1 min-w-0 max-w-fit bg-black/50 backdrop-blur-xl border border-white/10 text-white text-[13px] font-bold px-4 py-2.5 rounded-full flex items-center gap-2 shadow-lg hover:bg-black/65 transition-colors"
+              >
                 <MapPin size={16} strokeWidth={2.5} className="shrink-0 text-white/80" /> 
                 <span className="truncate">{event.location.address}</span>
-              </div>
+              </button>
             )}
 
             {/* Type/Mandatory Badges */}
@@ -171,6 +366,28 @@ export const EventDetail: React.FC = () => {
           </div>
         )}
 
+        {/* Organizer Card */}
+        {(event.contact_name || event.contact_phone) && (
+          <div className="bg-white/80 backdrop-blur-2xl rounded-[36px] p-6 md:p-8 shadow-[0_12px_40px_rgba(0,100,200,0.04)] border border-white transition-all hover:shadow-[0_16px_50px_rgba(0,100,200,0.08)]">
+            <h3 className="text-[22px] font-extrabold text-[#1D1D1F] mb-4 tracking-tight">Organizer</h3>
+            <div className="flex flex-wrap gap-3">
+              {event.contact_name && (
+                <span className="flex items-center gap-2 bg-[#F9F9FB] px-4 py-2.5 rounded-full border border-black/5 text-[14px] font-bold text-[#1D1D1F]">
+                  <User size={16} className="text-[#6C63FF]" /> {event.contact_name}
+                </span>
+              )}
+              {event.contact_phone && (
+                <a
+                  href={`tel:${event.contact_phone}`}
+                  className="flex items-center gap-2 bg-[#F9F9FB] px-4 py-2.5 rounded-full border border-black/5 text-[14px] font-bold text-[#1D1D1F] hover:bg-black/5 transition-colors"
+                >
+                  <Phone size={16} className="text-[#6C63FF]" /> {event.contact_phone}
+                </a>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Timeline Card */}
         {event.timeline?.length > 0 && (
           <div className="bg-white/80 backdrop-blur-2xl rounded-[36px] p-6 md:p-8 shadow-[0_12px_40px_rgba(0,100,200,0.04)] border border-white transition-all hover:shadow-[0_16px_50px_rgba(0,100,200,0.08)]">
@@ -194,13 +411,28 @@ export const EventDetail: React.FC = () => {
           </div>
         )}
 
-        {/* Map Card */}
-        {event.location?.lat && (
+        {/* Location Card — interactive map optional, Locate button always shown when we have somewhere to send them */}
+        {(event.location?.address || locateUrl) && (
           <div className="bg-white/80 backdrop-blur-2xl rounded-[36px] p-6 md:p-8 shadow-[0_12px_40px_rgba(0,100,200,0.04)] border border-white transition-all hover:shadow-[0_16px_50px_rgba(0,100,200,0.08)]">
-            <h3 className="text-[22px] font-extrabold text-[#1D1D1F] mb-5 tracking-tight">Location</h3>
-            <div className="rounded-[28px] overflow-hidden border border-black/5 shadow-inner">
-              <EventMap lat={event.location.lat} lng={event.location.lng} label={event.title} />
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-[22px] font-extrabold text-[#1D1D1F] tracking-tight">Location</h3>
+              {locateUrl && (
+                <button
+                  onClick={() => window.open(locateUrl, '_blank', 'noopener,noreferrer')}
+                  className="flex items-center gap-2 bg-[#1D1D1F] text-white text-[13px] font-bold px-4 py-2.5 rounded-full hover:bg-black transition-colors shadow-sm active:scale-95"
+                >
+                  <Navigation size={15} /> Locate
+                </button>
+              )}
             </div>
+
+            {event.use_map !== false && event.location?.lat && event.location?.lng ? (
+              <div className="rounded-[28px] overflow-hidden border border-black/5 shadow-inner">
+                <EventMap lat={event.location.lat} lng={event.location.lng} label={event.title} />
+              </div>
+            ) : (
+              <p className="text-[15px] text-[#5E6C84] font-medium">{event.location?.address || 'Location details available via the Locate button.'}</p>
+            )}
           </div>
         )}
       </div>
@@ -215,30 +447,88 @@ export const EventDetail: React.FC = () => {
               {event.registration_fee ? `₹${event.registration_fee}` : 'Free'}
             </p>
           </div>
-          
-          <button
-            onClick={handleGetTicket}
-            disabled={registering || isFull}
-            className={`flex-1 max-w-[200px] sm:max-w-[240px] py-4 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2
-              ${isFull 
-                ? 'bg-gray-200 text-[#86868B] shadow-none cursor-not-allowed' 
-                : 'bg-[#1D1D1F] hover:bg-black text-white active:scale-95'
-              }`}
-          >
-            {registering ? (
-              <span className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full border-[2.5px] border-white/30 border-t-white animate-spin" />
-                Booking...
-              </span>
-            ) : isFull ? (
-              'Event Full'
-            ) : (
-              'Get Ticket'
-            )}
-          </button>
+
+          {event.external_form_url && formOpened ? (
+            <button
+              onClick={handleConfirmExternalForm}
+              disabled={registering}
+              className="flex-1 max-w-[260px] py-4 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2 bg-[#1D1D1F] hover:bg-black text-white active:scale-95"
+            >
+              {registering ? 'Confirming…' : "I've submitted the form"}
+            </button>
+          ) : (
+            <button
+              onClick={handleEnrollClick}
+              disabled={registering || isFull || regClosed}
+              className={`flex-1 max-w-[200px] sm:max-w-[240px] py-4 rounded-full text-[15px] font-extrabold transition-all shadow-[0_10px_30px_rgba(0,0,0,0.15)] flex items-center justify-center gap-2
+                ${isFull || regClosed
+                  ? 'bg-gray-200 text-[#86868B] shadow-none cursor-not-allowed' 
+                  : 'bg-[#1D1D1F] hover:bg-black text-white active:scale-95'
+                }`}
+            >
+              {registering ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full border-[2.5px] border-white/30 border-t-white animate-spin" />
+                  Booking...
+                </span>
+              ) : regClosed ? (
+                'Registration Closed'
+              ) : isFull ? (
+                'Event Full'
+              ) : event.external_form_url ? (
+                'Enroll'
+              ) : (
+                'Enroll'
+              )}
+            </button>
+          )}
         </div>
       </div>
 
+      <EnrollStatusOverlay
+        phase={successNext ? 'success' : registering ? 'enrolling' : 'idle'}
+        title="Registration Complete"
+        subtitle={event.team_based ? 'Your team tickets are ready' : 'Your ticket is ready'}
+        onDone={() => { if (successNext) navigate(successNext); }}
+      />
+
+      <TeamChoiceModal
+        isOpen={showTeamChoice}
+        onClose={() => setShowTeamChoice(false)}
+        onJoinWithCode={handleJoinWithCode}
+        onCreateNew={handleCreateNewTeam}
+        joining={joiningByCode}
+        error={joinCodeError}
+      />
+
+      <TeamEnrollModal
+        isOpen={showTeamModal}
+        onClose={() => setShowTeamModal(false)}
+        leaderName={userData?.name || ''}
+        maxTeamSize={event.team_size || 4}
+        requiresEmail={!!event.requires_email}
+        submitting={registering}
+        error={teamError}
+        onSubmit={handleTeamSubmit}
+      />
+
+      {event.is_paid && (
+        <PaymentModal
+          isOpen={showPayment}
+          onClose={() => { setShowPayment(false); setPendingTeam(null); }}
+          amount={event.registration_fee || 0}
+          upiId={event.upi_id}
+          qrImage={event.payment_qr_image}
+          payeeName={event.contact_name || event.coordinator_name || 'Event Organizer'}
+          eventTitle={event.title}
+          submitting={registering}
+          error={paymentError}
+          onSubmit={(proof) => {
+            if (pendingTeam) finishTeamRegistration(pendingTeam.teamName, pendingTeam.teammates, proof);
+            else doRegister(proof);
+          }}
+        />
+      )}
     </div>
   );
 };

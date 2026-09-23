@@ -11,6 +11,7 @@ interface UserData {
   reg_no: string;
   department: string;
   role: UserRole;
+  email?: string;
 }
 
 // Auth context interface

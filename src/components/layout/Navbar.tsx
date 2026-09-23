@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { NotificationBell } from '@/components/layout/NotificationBell';
 
 export const Navbar: React.FC = () => {
   const { user, userData, logout } = useAuth();
@@ -53,8 +54,12 @@ export const Navbar: React.FC = () => {
                       Dashboard
                     </Link>
                     <Link
-                      to="/student"
-                      className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 text-[#5E6C84] hover:text-[#1D1D1F]`}
+                      to="/tickets"
+                      className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all duration-300 ${
+                        isActive('/tickets')
+                          ? 'bg-[#1D1D1F] text-white shadow-sm'
+                          : 'text-[#5E6C84] hover:text-[#1D1D1F]'
+                      }`}
                     >
                       Tickets
                     </Link>
@@ -101,7 +106,8 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* User Section / Auth / Logout */}
-          <div className="hidden md:flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-3">
+            {user && userData && <NotificationBell />}
             {user && userData ? (
               <div className="flex items-center gap-2 bg-white/60 backdrop-blur-xl p-1 pl-4 rounded-full border border-white/80 shadow-sm">
                 <div className="flex items-center gap-2 mr-1">
@@ -137,20 +143,23 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Mobile Menu Button */}
-          <button
-            className="md:hidden w-10 h-10 rounded-full bg-white/70 backdrop-blur-md flex items-center justify-center text-[#1D1D1F] focus:outline-none border border-white/80 shadow-sm"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            )}
-          </button>
+          <div className="md:hidden flex items-center gap-2">
+            {user && userData && <NotificationBell />}
+            <button
+              className="w-10 h-10 rounded-full bg-white/70 backdrop-blur-md flex items-center justify-center text-[#1D1D1F] focus:outline-none border border-white/80 shadow-sm"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              {isMobileMenuOpen ? (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Menu Dropdown */}
@@ -176,7 +185,14 @@ export const Navbar: React.FC = () => {
                         className="px-4 py-3 rounded-2xl font-semibold text-[15px] text-[#1D1D1F] bg-white/60 border border-white shadow-sm"
                         onClick={() => setIsMobileMenuOpen(false)}
                       >
-                        Dashboard & Tickets
+                        Dashboard
+                      </Link>
+                      <Link
+                        to="/tickets"
+                        className="px-4 py-3 rounded-2xl font-semibold text-[15px] text-[#1D1D1F] bg-white/60 border border-white shadow-sm"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        Tickets
                       </Link>
                     </>
                   )}

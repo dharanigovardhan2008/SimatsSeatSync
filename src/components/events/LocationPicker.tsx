@@ -35,7 +35,8 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const center: [number, number] = value ? [value.lat, value.lng] : DEFAULT_CENTER;
+  const hasPin = !!(value && value.lat !== undefined && value.lng !== undefined);
+  const center: [number, number] = hasPin ? [value!.lat as number, value!.lng as number] : DEFAULT_CENTER;
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -132,14 +133,14 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({ value, onChange 
       {error && <p className="mb-2 text-sm text-red-500">{error}</p>}
 
       <div className="rounded-2xl overflow-hidden h-56 shadow-[inset_6px_6px_10px_rgb(163,177,198,0.5),inset_-6px_-6px_10px_rgba(255,255,255,0.5)]">
-        <MapContainer center={center} zoom={value ? 16 : 12} style={{ height: '100%', width: '100%' }}>
+        <MapContainer center={center} zoom={hasPin ? 16 : 12} style={{ height: '100%', width: '100%' }}>
         <TileLayer
             attribution='&copy; OpenStreetMap contributors &copy; CARTO'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
-          {value && <Marker position={[value.lat, value.lng]} />}
+          {hasPin && <Marker position={[value!.lat as number, value!.lng as number]} />}
           <ClickHandler onPick={handleMapClick} />
-          {value && <FlyTo lat={value.lat} lng={value.lng} />}
+          {hasPin && <FlyTo lat={value!.lat as number} lng={value!.lng as number} />}
         </MapContainer>
       </div>
       <p className="mt-2 text-xs text-[#A0AEC0]">

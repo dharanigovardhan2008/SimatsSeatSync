@@ -19,6 +19,15 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
+    match /notifications/{notificationId} {
+      // Anyone signed in can create a notification for someone else (e.g.
+      // a student's payment submission notifying their coordinator) — the
+      // recipient is just a field on the doc, not tied to who wrote it.
+      // Reading/updating (marking read) is restricted to the recipient.
+      allow read, update: if request.auth != null && resource.data.recipient_id == request.auth.uid;
+      allow create: if request.auth != null;
+    }
+
     match /events/{eventId} {
       allow read: if request.auth != null;
 
@@ -37,13 +46,41 @@ service cloud.firestore {
     }
 
     match /registrations/{registrationId} {
-      allow read: if request.auth != null &&
-        (resource.data.user_id == request.auth.uid || isAdmin());
+      // Students see their own; admins see everything; coordinators see
+      // registrations belonging to events they own (looked up via the
+      // event doc, which costs one extra read per document evaluated).
+      allow read: if request.auth != null && (
+        resource.data.user_id == request.auth.uid ||
+        isAdmin() ||
+        (isCoordinator() &&
+          exists(/databases/$(database)/documents/events/$(resource.data.event_id)) &&
+          get(/databases/$(database)/documents/events/$(resource.data.event_id)).data.coordinator_id == request.auth.uid)
+      );
       allow create: if request.auth != null &&
         request.resource.data.user_id == request.auth.uid;
-      allow update: if isAdmin();
+      // Admins can update any registration; coordinators can update ones
+      // that belong to an event they own (payment verification, marking
+      // attendance). This does not restrict which fields a coordinator
+      // may change — that trust boundary is enforced by the app's own
+      // functions, not by field-level rules, to keep this readable.
+      allow update: if isAdmin() ||
+        (isCoordinator() &&
+          exists(/databases/$(database)/documents/events/$(resource.data.event_id)) &&
+          get(/databases/$(database)/documents/events/$(resource.data.event_id)).data.coordinator_id == request.auth.uid);
       allow delete: if request.auth != null &&
         (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+
+    match /teams/{teamId} {
+      // Team docs hold nothing sensitive — a name and a headcount — so
+      // any signed-in user can read one via an invite link before
+      // they've registered for anything themselves.
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      // Joining a team only ever increments member_count; nobody should
+      // be able to rename the team or change its capacity by joining it.
+      allow update: if request.auth != null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['member_count']);
     }
 
     match /waitlist/{waitlistId} {
