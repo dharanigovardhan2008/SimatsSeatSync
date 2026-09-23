@@ -530,6 +530,7 @@ export const EventDetail: React.FC = () => {
         leaderName={userData?.name || ''}
         leaderId={userData?.id || ''}
         maxTeamSize={event.team_size || 4}
+        minTeamSize={event.min_team_size || 1}
         requiresEmail={!!event.requires_email}
         submitting={registering}
         error={teamError}
