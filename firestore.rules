@@ -13,10 +13,32 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null;
       allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
-      allow read: if isAdmin();
+      allow update: if request.auth != null && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /user_teams/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /team_invitations/{invitationId} {
+      allow read: if request.auth != null && (
+        resource.data.leader_id == request.auth.uid ||
+        resource.data.recipient_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if request.auth != null && request.resource.data.leader_id == request.auth.uid;
+      allow update: if request.auth != null && (
+        resource.data.recipient_id == request.auth.uid ||
+        resource.data.leader_id == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if request.auth != null && (
+        resource.data.leader_id == request.auth.uid ||
+        resource.data.recipient_id == request.auth.uid ||
+        isAdmin()
+      );
     }
 
     match /notifications/{notificationId} {
@@ -51,13 +73,16 @@ service cloud.firestore {
       // event doc, which costs one extra read per document evaluated).
       allow read: if request.auth != null && (
         resource.data.user_id == request.auth.uid ||
+        resource.data.booked_by == request.auth.uid ||
         isAdmin() ||
         (isCoordinator() &&
           exists(/databases/$(database)/documents/events/$(resource.data.event_id)) &&
           get(/databases/$(database)/documents/events/$(resource.data.event_id)).data.coordinator_id == request.auth.uid)
       );
-      allow create: if request.auth != null &&
-        request.resource.data.user_id == request.auth.uid;
+      allow create: if request.auth != null && (
+        request.resource.data.user_id == request.auth.uid ||
+        request.resource.data.booked_by == request.auth.uid
+      );
       // Admins can update any registration; coordinators can update ones
       // that belong to an event they own (payment verification, marking
       // attendance). This does not restrict which fields a coordinator
