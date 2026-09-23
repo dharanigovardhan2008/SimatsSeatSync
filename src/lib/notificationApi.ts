@@ -1,7 +1,7 @@
 import { auth } from './firebase';
 
 const getBackendUrl = () => {
-  return import.meta.env.VITE_NOTIFICATION_API_URL || 'http://localhost:8000';
+  return import.meta.env.VITE_NOTIFICATION_API_URL || '';
 };
 
 const getAuthToken = async () => {
