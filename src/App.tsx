@@ -21,12 +21,12 @@ import { TeamTickets } from '@/pages/TeamTickets';
 import { Teams } from '@/pages/Teams';
 import { NotFound } from '@/pages/NotFound';
 import { CloudBackground } from '@/components/ui/CloudBackground';
-
+import { PageTransition } from '@/components/ui/PageTransition';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 const StudentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userData, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen message="Loading dashboard..." />;
   if (!user || !userData) return <Navigate to="/login" replace />;
   if (userData.role !== 'student') return <Navigate to="/" replace />;
   return <>{children}</>;
@@ -34,7 +34,7 @@ const StudentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userData, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen message="Initializing Admin..." />;
   if (!user || !userData) return <Navigate to="/login" replace />;
   if (userData.role !== 'admin') return <Navigate to="/" replace />;
   return <>{children}</>;
@@ -42,7 +42,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 const CoordinatorRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userData, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen message="Initializing Coordinator..." />;
   if (!user || !userData) return <Navigate to="/login" replace />;
   if (userData.role !== 'coordinator') return <Navigate to="/" replace />;
   return <>{children}</>;
@@ -51,7 +51,7 @@ const CoordinatorRoute: React.FC<{ children: React.ReactNode }> = ({ children })
 // Any signed-in role can view an event or their ticket
 const AuthedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userData, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <LoadingScreen message="Verifying session..." />;
   if (!user || !userData) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
@@ -61,7 +61,7 @@ const AuthedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const RootRoute: React.FC = () => {
   const { user, userData, loading } = useAuth();
   if (loading) {
-    return <LoadingScreen />;
+    return <LoadingScreen message="Welcome to SeatSync..." />;
   }
   if (user && userData) {
     if (userData.role === 'admin') return <Navigate to="/admin" replace />;
@@ -115,7 +115,9 @@ export function App() {
             <CloudBackground speed={0.8} count={6} />
           </div>
           <div className="relative z-0">
-            <AppRoutes />
+            <PageTransition>
+              <AppRoutes />
+            </PageTransition>
           </div>
         </div>
       </AuthProvider>

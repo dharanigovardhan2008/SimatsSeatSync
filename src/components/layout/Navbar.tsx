@@ -38,7 +38,6 @@ export const Navbar: React.FC = () => {
               <span className="font-extrabold text-[18px] text-[#1D1D1F] tracking-tight group-hover:text-black transition-colors">
                 Seat<span className="bg-gradient-to-r from-[#3B9EFF] to-[#007AFF] bg-clip-text text-transparent">Sync</span>
               </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#38B2AC] shadow-[0_0_8px_rgba(56,178,172,0.8)]"></span>
             </div>
           </Link>
 
