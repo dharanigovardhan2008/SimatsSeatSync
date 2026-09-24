@@ -74,23 +74,29 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   if (height) customStyle.height = height;
 
   return (
-    <style>{`
-      @keyframes skeleton-shimmer {
-        0% { background-position: -1000px 0; }
-        100% { background-position: 1000px 0; }
-      }
-      .skeleton-shimmer {
-        animation: skeleton-shimmer 2s infinite;
-        background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
-        background-size: 1000px 100%;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .skeleton-shimmer {
-          animation: none !important;
-          background: #e5e7eb !important;
+    <>
+      <style>{`
+        @keyframes skeleton-shimmer {
+          0% { background-position: -1000px 0; }
+          100% { background-position: 1000px 0; }
         }
-      }
-    `} />
+        .skeleton-shimmer {
+          animation: skeleton-shimmer 2s infinite;
+          background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+          background-size: 1000px 100%;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .skeleton-shimmer {
+            animation: none !important;
+            background: #e5e7eb !important;
+          }
+        }
+      `}</style>
+      <div
+        className={getBaseClasses()}
+        style={customStyle}
+      />
+    </>
   );
 };
 

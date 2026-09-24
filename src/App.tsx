@@ -14,6 +14,8 @@ import { ScanQR } from '@/pages/ScanQR';
 import { TeamInvite } from '@/pages/TeamInvite';
 import { JoinTeam } from '@/pages/JoinTeam';
 import { PaymentVerificationPage } from '@/pages/PaymentVerificationPage';
+import { TransactionStatus } from '@/pages/TransactionStatus';
+import { CheckoutPage } from '@/pages/CheckoutPage';
 import { EventDetail } from '@/pages/EventDetail';
 import { Ticket } from '@/pages/Ticket';
 import { MyTickets } from '@/pages/MyTickets';
@@ -23,6 +25,8 @@ import { NotFound } from '@/pages/NotFound';
 import { CloudBackground } from '@/components/ui/CloudBackground';
 import { PageTransition } from '@/components/ui/PageTransition';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import { InstallPWA } from '@/components/ui/InstallPWA';
+
 
 const StudentRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, userData, loading } = useAuth();
@@ -79,6 +83,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/register" element={<Register />} />
 
       <Route path="/event/:eventId" element={<AuthedRoute><EventDetail /></AuthedRoute>} />
+      <Route path="/checkout/:eventId" element={<StudentRoute><CheckoutPage /></StudentRoute>} />
       <Route path="/ticket/:registrationId" element={<AuthedRoute><Ticket /></AuthedRoute>} />
       <Route path="/tickets" element={<AuthedRoute><MyTickets /></AuthedRoute>} />
       <Route path="/team-tickets/:teamId" element={<AuthedRoute><TeamTickets /></AuthedRoute>} />
@@ -99,6 +104,7 @@ const AppRoutes: React.FC = () => {
           lands back here right after creating an account. */}
       <Route path="/join-team/:teamId" element={<JoinTeam />} />
       <Route path="/payments/:eventId" element={<AuthedRoute><PaymentVerificationPage /></AuthedRoute>} />
+      <Route path="/transaction/:registrationId" element={<AuthedRoute><TransactionStatus /></AuthedRoute>} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -114,6 +120,7 @@ export function App() {
           <div className="fixed inset-0 -z-10 pointer-events-none">
             <CloudBackground speed={0.8} count={6} />
           </div>
+          <InstallPWA />
           <div className="relative z-0">
             <PageTransition>
               <AppRoutes />

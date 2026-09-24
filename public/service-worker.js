@@ -1,9 +1,13 @@
-// Service Worker for SeatSync PWA
 const CACHE_NAME = 'seatsync-v1';
 const SHELL_ASSETS = [
   '/',
   '/index.html',
+  '/favicon-48.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/maskable-512.png',
   '/seatsync.png',
+  '/manifest.webmanifest'
 ];
 
 self.addEventListener('install', (e) => {
@@ -15,12 +19,37 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then((keyList) => {
+      return Promise.all(keyList.map((key) => {
+        if (key !== CACHE_NAME) {
+          return caches.delete(key);
+        }
+      }));
+    })
+  );
+  self.clients.claim();
+});
+
 self.addEventListener('fetch', (e) => {
-  // Don't cache sensitive/payment endpoints
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/payments') || url.pathname.includes('payment')) {
+
+  // DO NOT cache Firebase authentication, Firestore, or any private API data.
+  // Explicitly bypass caching for Google APIs, Firebase, and payment endpoints.
+  if (
+    url.hostname.includes('firebaseio.com') ||
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('gstatic.com') ||
+    url.pathname.startsWith('/payments') ||
+    url.pathname.includes('payment') ||
+    url.pathname.startsWith('/api/') ||
+    e.request.method !== 'GET'
+  ) {
     return;
   }
+
+  // Cache-first for static shell assets
   e.respondWith(
     caches.match(e.request).then((cached) => {
       if (cached) return cached;
